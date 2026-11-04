@@ -560,3 +560,20 @@ def gold_test_v2_simulation(secret: str):
             'broker_close_api_live_verified':False,
             'new_order_submitted':False,
             'main_bot_orders_enabled':False}
+
+@app.post('/gold-test-v2-execute')
+def gold_test_v2_execute(request: Request):
+    """Fail-closed V2 entry point. No order capability is installed."""
+    import secrets
+    from gold_test_v2 import execution_gate
+    supplied = request.headers.get('X-DEMO-TEST-KEY','')
+    expected = os.environ.get('DEMO_TEST_KEY','')
+    authenticated = bool(expected and len(expected)>=24 and
+                         secrets.compare_digest(supplied,expected))
+    gate = execution_gate(DB,authenticated=authenticated)
+    if not authenticated:
+        raise HTTPException(403,'Test authorisation required')
+    return {'execution_permitted':gate.allowed,
+            'reason':gate.reason,
+            'new_order_submitted':False,
+            'main_bot_orders_enabled':False}
