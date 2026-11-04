@@ -10,7 +10,8 @@ button,select{background:#1c2942;border:1px solid #3b4b68;color:var(--ink);paddi
 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:28px 0}.card,.panel{background:linear-gradient(155deg,#19243a,#111a2c);border:1px solid var(--edge);border-radius:18px;padding:22px;box-shadow:0 10px 35px #0002}.card .label{font-size:13px;color:var(--muted)}.value{font-size:32px;font-weight:780;letter-spacing:-1px;margin-top:11px}.good{color:var(--green)}.bad{color:var(--red)}.layout{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}.panel h2{font-size:17px;margin:0 0 18px}.bar{height:14px;background:#29364f;border-radius:20px;display:flex;overflow:hidden}.bar .win{background:var(--green)}.bar .loss{background:var(--red)}.legend{display:flex;gap:20px;margin-top:15px;flex-wrap:wrap;color:var(--muted)}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}.market{display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--edge)}.market:last-child{border:0}.market strong{font-size:18px}.tablepanel{margin-top:16px;overflow:hidden}.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;text-align:left;white-space:nowrap}th{font-size:12px;color:var(--muted);font-weight:600;padding:13px 10px;border-bottom:1px solid var(--edge)}td{padding:15px 10px;border-bottom:1px solid #253047}tbody tr:last-child td{border:0}.pill{border-radius:8px;padding:5px 9px;font-size:12px;font-weight:750;background:#29344a}.pill.win{color:var(--green);background:#153b36}.pill.loss{color:var(--red);background:#442535}.pill.open{color:#a9c5ff;background:#253656}.empty{padding:30px;color:var(--muted);text-align:center}.foot{margin-top:22px;color:var(--muted);font-size:12px;line-height:1.7}.notice{color:#ffcd82;margin-top:12px;font-size:13px}.small{font-size:13px}.error{color:var(--red)}@media(max-width:850px){.cards{grid-template-columns:repeat(2,1fr)}.layout{grid-template-columns:1fr}}@media(max-width:500px){main{padding:20px 12px}.cards{gap:10px}.card,.panel{padding:16px}.value{font-size:25px}}
 </style></head><body><main>
 <header class="top"><div><div class="brand">UT<span>BOT</span> <span style="color:#fff;font-weight:400">/ Signal Journal</span></div><div class="subtitle">Gold &amp; Oil · TradingView alerts · Paper performance</div></div>
-<div class="controls"><span class="tag">● SIGNAL ONLY · NO ORDERS</span><select id="market" aria-label="Filter market"><option value="ALL">All markets</option></select><button id="refresh">↻ Refresh</button></div></header>
+<div class="controls"><span class="tag">● SIGNAL ONLY · NO ORDERS</span><select id="market" aria-label="Filter market"><option value="ALL">All markets</option></select><button id="pauseOrders" type="button">Pause orders</button><button id="resumeOrders" type="button">Resume orders</button><button id="refresh">↻ Refresh</button></div></header>
+<p class="notice" id="orderControlStatus" role="status" aria-live="polite">Loading operator controls…</p><p class="small muted">Pause leaves existing broker positions and pending broker orders unchanged. Resume applies only to future TradingView signals; skipped signals are not replayed. These controls do not activate broker trading while the safety gate is closed.</p>
 <section class="cards" aria-label="Performance summary"><div class="card"><div class="label">Closed paper trades</div><div class="value" id="closed">—</div></div><div class="card"><div class="label">Win rate</div><div class="value" id="rate">—</div></div><div class="card"><div class="label">Winning / losing</div><div class="value" id="record">—</div></div><div class="card"><div class="label">Open paper positions</div><div class="value" id="open">—</div></div></section>
 <section class="layout"><div class="panel"><h2>Trade outcomes</h2><div class="bar" aria-label="Wins and losses"><div class="win" id="winbar"></div><div class="loss" id="lossbar"></div></div><div class="legend"><span><i class="dot" style="background:var(--green)"></i><span id="wincount">0</span> wins</span><span><i class="dot" style="background:var(--red)"></i><span id="losscount">0</span> losses</span><span><i class="dot" style="background:#8b9ab4"></i><span id="unpriced">0</span> unpriced</span></div><p class="notice">Points are calculated from TradingView bar-close prices, not broker fills. No GBP P&amp;L is implied.</p></div>
 <div class="panel"><h2>Market breakdown</h2><div id="markets"><div class="empty">Waiting for signals…</div></div></div></section>
@@ -68,11 +69,35 @@ function render(){
  }
  put(el('updated'),'Updated '+new Date().toLocaleTimeString());
 }
+async function refreshOrderControl(){
+ try{
+  const response=await fetch('/order-control/'+encodeURIComponent(secret),{cache:'no-store',credentials:'same-origin'});
+  if(!response.ok)throw Error('Control status unavailable ('+response.status+')');
+  const state=await response.json();
+  put(el('orderControlStatus'),'Operator mode: '+state.operator_mode+' · Broker orders: '+(state.orders_enabled?'enabled':'disabled (safety gate)'));
+  el('pauseOrders').disabled=state.operator_paused;
+  el('resumeOrders').disabled=!state.operator_paused;
+ }catch(err){put(el('orderControlStatus'),err.message);el('pauseOrders').disabled=true;el('resumeOrders').disabled=true}
+}
+async function setOrderControl(action){
+ el('pauseOrders').disabled=true;el('resumeOrders').disabled=true;
+ try{
+  const response=await fetch('/order-control/'+encodeURIComponent(secret),{
+   method:'POST',credentials:'same-origin',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({action})
+  });
+  if(!response.ok)throw Error('Unable to '+action+' ('+response.status+')');
+  await refreshOrderControl();
+ }catch(err){put(el('orderControlStatus'),err.message);await refreshOrderControl()}
+}
+el('pauseOrders').addEventListener('click',()=>setOrderControl('pause'));
+el('resumeOrders').addEventListener('click',()=>setOrderControl('resume'));
 async function refresh(){
  try{
  const response=await fetch('/journal/'+encodeURIComponent(secret),{cache:'no-store',credentials:'same-origin'});
  if(!response.ok)throw Error('Journal request failed ('+response.status+')');
- draw(await response.json());put(el('status'),'Connected.');
+ draw(await response.json());put(el('status'),'Connected.');await refreshOrderControl();
  }catch(err){put(el('updated'),'Unable to refresh');put(el('status'),err.message);el('status').className='error'}
 }
 el('market').addEventListener('change',render);el('refresh').addEventListener('click',refresh);
