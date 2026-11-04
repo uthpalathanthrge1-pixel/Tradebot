@@ -5,10 +5,11 @@ import os
 import requests
 
 class CapitalCheckError(Exception):
-    def __init__(self, stage, status=None):
+    def __init__(self, stage, status=None, error_code=None):
         super().__init__(stage)
         self.stage = stage
         self.status = status
+        self.error_code = error_code
 
 BASE = "https://demo-api-capital.backend-capital.com/api/v1"
 
@@ -159,7 +160,18 @@ class Capital:
                            "X-CAP-API-KEY": os.environ["CAPITAL_API_KEY"]}
                 continue
             if not response.ok:
-                raise CapitalCheckError("history_transactions", response.status_code)
+                # Capital.com normally returns a machine-readable errorCode.
+                # Never expose arbitrary broker response text to browser users.
+                import re
+                try:
+                    body = response.json()
+                except ValueError:
+                    body = {}
+                raw_code = body.get("errorCode") if isinstance(body, dict) else None
+                safe_code = raw_code if (isinstance(raw_code, str) and
+                    re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", raw_code)) else None
+                raise CapitalCheckError("history_transactions", response.status_code,
+                                        error_code=safe_code)
             try:
                 return response.json()
             except ValueError:
