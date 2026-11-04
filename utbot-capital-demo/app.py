@@ -730,7 +730,7 @@ def broker_history_probe_view(secret: str):
     from capital import Capital, CapitalCheckError
     from broker_history_probe import probe_history
     try:
-        return probe_history(Capital(),lookback_days=7)
+        return probe_history(Capital(),lookback_days=1)
     except CapitalCheckError as exc:
         return {'ready':False,'stage':exc.stage,'http_status':exc.status,
                 'broker_error_code':exc.error_code,
