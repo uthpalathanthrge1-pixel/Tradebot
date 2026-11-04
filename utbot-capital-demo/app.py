@@ -734,6 +734,20 @@ def broker_history_probe_view(secret: str):
     except CapitalCheckError as exc:
         return {'ready':False,'stage':exc.stage,'http_status':exc.status,
                 'orders_submitted':False,'journal_updated':False}
-    except Exception:
+    except Exception as exc:
+        # Report only the exception class; exception text may contain credentials,
+        # request URLs, or broker transaction identifiers.
+        import requests
+        if isinstance(exc, requests.exceptions.Timeout):
+            category='broker_timeout'
+        elif isinstance(exc, requests.exceptions.ConnectionError):
+            category='broker_connection_error'
+        elif isinstance(exc, (ImportError, ModuleNotFoundError)):
+            category='module_import_error'
+        elif isinstance(exc, (TypeError, ValueError, KeyError, AttributeError)):
+            category='response_parsing_error'
+        else:
+            category='unexpected_probe_error'
         return {'ready':False,'stage':'broker_history_probe_failed',
+                'error_category':category,'error_type':type(exc).__name__,
                 'orders_submitted':False,'journal_updated':False}
