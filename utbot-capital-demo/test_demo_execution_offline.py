@@ -9,6 +9,7 @@ class DemoExecutionOfflineTests(unittest.TestCase):
         self.client=Mock()
         self.client.account_check.return_value={
             'configured_account_found':True,'account_currency':'GBP','account_type':'CFD'}
+        self.client.active_account_check.return_value={'active_account_verified':True}
         self.client.market_details.return_value={
             'instrument':{'epic':'GOLD'},'snapshot':{'marketStatus':'TRADEABLE'}}
         self.client.positions.return_value=[]
@@ -29,6 +30,11 @@ class DemoExecutionOfflineTests(unittest.TestCase):
         self.client.account_check.return_value={'configured_account_found':False}
         result=execute_signal(self.client,self.signal,approved=True,**self.kwargs)
         self.assertEqual(result['status'],'blocked')
+        self.client.open_protected_position.assert_not_called()
+    def test_wrong_active_account_never_places_order(self):
+        self.client.active_account_check.return_value={'active_account_verified':False}
+        result=execute_signal(self.client,self.signal,approved=True,**self.kwargs)
+        self.assertEqual(result['reason'],'active_session_account_not_verified')
         self.client.open_protected_position.assert_not_called()
     def test_market_closed_never_places_order(self):
         self.client.market_details.return_value={
