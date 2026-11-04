@@ -131,3 +131,30 @@ def trade_readiness(secret: str):
         return {'ready': False, 'stage': exc.stage, 'http_status': exc.status, 'orders_enabled': False}
     except Exception:
         return {'ready': False, 'stage': 'readiness_check_failed', 'orders_enabled': False}
+
+@app.get('/discover-markets/{secret}')
+def discover_markets(secret: str):
+    """Read-only candidate search; requires manual confirmation of exact EPICs."""
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    from capital import Capital, CapitalCheckError
+    try:
+        client = Capital()
+        account = client.account_check()
+        if not account.get('configured_account_found') or account.get('account_type') != 'CFD':
+            return {'ready': False, 'reason': 'unique_gbp_cfd_demo_not_verified', 'orders_enabled': False}
+        found = {}
+        for label, term in [('GOLD', 'Gold'), ('OIL', 'Crude Oil')]:
+            response = client.market_search(term)
+            candidates = response.get('markets', [])
+            found[label] = [
+                {'epic': m.get('epic'), 'instrument_name': m.get('instrumentName'),
+                 'instrument_type': m.get('instrumentType'), 'market_status': m.get('marketStatus')}
+                for m in candidates[:20]
+            ]
+        return {'ready': True, 'candidates': found, 'selection_required': True,
+                'orders_enabled': False}
+    except CapitalCheckError as exc:
+        return {'ready': False, 'stage': exc.stage, 'http_status': exc.status, 'orders_enabled': False}
+    except Exception:
+        return {'ready': False, 'stage': 'market_discovery_failed', 'orders_enabled': False}
