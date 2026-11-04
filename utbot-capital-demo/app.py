@@ -1,5 +1,6 @@
 """Demo-only guarded prototype. No live trading endpoint exists."""
 import os, sqlite3, threading
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Request
 
 app = FastAPI(title='UT Bot Capital Demo')
@@ -31,7 +32,11 @@ async def webhook(secret: str, request: Request):
         alert = await request.json()
         symbol = str(alert['symbol']).upper()
         direction = str(alert['direction']).upper()
-        bar_time = int(alert['bar_time'])
+        raw_time = alert['bar_time']
+        if isinstance(raw_time, int) or (isinstance(raw_time, str) and raw_time.isdigit()):
+            bar_time = int(raw_time)
+        else:
+            bar_time = int(datetime.fromisoformat(str(raw_time).replace('Z', '+00:00')).timestamp() * 1000)
     except (ValueError, KeyError, TypeError):
         raise HTTPException(400, 'Invalid alert')
     if direction not in ('BUY','SELL') or bar_time <= 0:
