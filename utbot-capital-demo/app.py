@@ -78,3 +78,56 @@ def capital_check(secret: str):
         return {'ready': False, 'stage': 'network_request_failed', 'orders_enabled': False}
     except Exception:
         return {'ready': False, 'stage': 'unexpected_error', 'orders_enabled': False}
+
+@app.get('/trade-readiness/{secret}')
+def trade_readiness(secret: str):
+    """Read-only broker discovery. Never enables or submits orders."""
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    from capital import Capital, CapitalCheckError
+    client = Capital()
+    try:
+        account = client.account_check()
+        if not account.get('configured_account_found') or account.get('account_type') != 'CFD':
+            return {'ready': False, 'reason': 'unique_gbp_cfd_demo_not_verified',
+                    'orders_enabled': False}
+        preferences = client.preferences()
+        existing = client.positions()
+        results = {}
+        for market in ('GOLD', 'OIL'):
+            epic = os.getenv('CAPITAL_' + market + '_EPIC', '').strip()
+            if not epic:
+                results[market] = {'epic_configured': False, 'market_verified': False}
+                continue
+            detail = client.market_details(epic)
+            instrument = detail.get('instrument', {})
+            dealing = detail.get('dealingRules', {})
+            results[market] = {
+                'epic_configured': True,
+                'market_verified': instrument.get('epic') == epic,
+                'instrument_name': instrument.get('name'),
+                'instrument_type': instrument.get('type'),
+                'market_status': detail.get('snapshot', {}).get('marketStatus'),
+                'min_deal_size': dealing.get('minDealSize'),
+                'min_step_distance': dealing.get('minStepDistance'),
+                'margin_factor': instrument.get('marginFactor'),
+                'margin_factor_unit': instrument.get('marginFactorUnit'),
+                'lot_size': instrument.get('lotSize'),
+                'currency': instrument.get('currencies'),
+            }
+        return {
+            'ready': False,
+            'reason': 'order_size_and_risk_engine_not_yet_validated',
+            'demo_account_verified': True,
+            'hedging_mode': preferences.get('hedgingMode'),
+            'leverage_preferences': preferences.get('leverages'),
+            'open_position_count': len(existing),
+            'markets': results,
+            'margin_target_gbp_each': 1000,
+            'combined_loss_trigger_gbp': -100,
+            'orders_enabled': False,
+        }
+    except CapitalCheckError as exc:
+        return {'ready': False, 'stage': exc.stage, 'http_status': exc.status, 'orders_enabled': False}
+    except Exception:
+        return {'ready': False, 'stage': 'readiness_check_failed', 'orders_enabled': False}
