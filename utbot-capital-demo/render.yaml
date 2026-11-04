@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: utbot-capital-demo
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    disk:
+      name: utbot-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DB_PATH
+        value: /data/utbot.sqlite3
+      - key: ENABLE_DEMO_ORDERS
+        value: 'false'
+      - key: WEBHOOK_SECRET
+        generateValue: true
