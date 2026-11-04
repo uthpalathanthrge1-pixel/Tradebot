@@ -204,3 +204,26 @@ def contract_specs(secret: str):
         return {'ready': False, 'stage': exc.stage, 'http_status': exc.status, 'orders_enabled': False}
     except Exception:
         return {'ready': False, 'stage': 'contract_spec_lookup_failed', 'orders_enabled': False}
+
+@app.get('/risk-readiness/{secret}')
+def risk_readiness(secret: str):
+    """Safe inspection only; no order placement or arming."""
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    from risk_engine import RiskLedger, orders_permitted
+    ledger = RiskLedger(DB)
+    state = ledger.state()
+    return {
+        'demo_only': True,
+        'orders_enabled': orders_permitted(),
+        'halted': state['halted'],
+        'halt_reason': state['reason'],
+        'realised_gbp': str(state['realised_gbp']),
+        'margin_target_gbp_each': 1000,
+        'combined_loss_trigger_gbp': -100,
+        'sizing_verified': False,
+        'broker_pnl_currency_verified': False,
+        'broker_order_confirmations_tested': False,
+        'continuous_risk_monitor_running': False,
+        'note': 'Fail-closed risk module installed but not connected to order execution.'
+    }
