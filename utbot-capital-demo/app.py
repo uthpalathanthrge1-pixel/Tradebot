@@ -649,3 +649,31 @@ def demo_execution_preflight(secret: str):
                 'orders_submitted':False}
     return {'ready_to_enable':False,'checks':checks,'orders_submitted':False,
             'next_step':'Validate broker close semantics, contract sizing and net GBP P/L in isolated approved demo tests before enabling execution.'}
+
+
+@app.get('/broker-diagnostics/{secret}')
+def broker_diagnostics(secret: str):
+    """Read-only broker inspection, redacted; never places or closes orders."""
+    import secrets as secure
+    expected=os.environ.get('WEBHOOK_SECRET','')
+    if not expected or not secure.compare_digest(secret,expected):
+        raise HTTPException(403,'Forbidden')
+    from capital import Capital, CapitalCheckError
+    from broker_diagnostics import describe_positions
+    try:
+        client=Capital()
+        account=client.account_check()
+        positions=client.positions()
+        return {'demo_account_verified':bool(
+                    account.get('configured_account_found') and
+                    account.get('account_currency')=='GBP' and
+                    account.get('account_type')=='CFD'),
+                'open_position_count':len(positions),
+                'position_shapes':describe_positions(positions),
+                'orders_submitted':False,
+                'note':'No historical closed position payloads are available from this endpoint.'}
+    except CapitalCheckError as exc:
+        return {'ready':False,'stage':exc.stage,'http_status':exc.status,
+                'orders_submitted':False}
+    except Exception:
+        return {'ready':False,'stage':'broker_diagnostics_failed','orders_submitted':False}
