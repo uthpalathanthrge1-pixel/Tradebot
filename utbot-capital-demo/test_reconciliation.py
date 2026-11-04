@@ -1,5 +1,5 @@
 import unittest
-from reconciliation import wait_for_position
+from reconciliation import wait_for_position, opened_deal_ids, wait_for_absence
 
 class ReconciliationTests(unittest.TestCase):
     def test_delayed_position(self):
@@ -28,6 +28,30 @@ class ReconciliationTests(unittest.TestCase):
         position, _=wait_for_position(fetch,'abc','GOLD','BUY','0.01',
                                       attempts=1,sleep=lambda _:None)
         self.assertIsNone(position)
+
+class CloseTests(unittest.TestCase):
+    def test_affected_deals_preferred_over_primary_id(self):
+        confirmation={'dealId':'order-id',
+                      'affectedDeals':[{'dealId':'position-id','status':'OPENED'}]}
+        self.assertEqual(opened_deal_ids(confirmation),['position-id'])
+
+    def test_multiple_opened_deals_detected(self):
+        confirmation={'dealId':'order-id','affectedDeals':[
+            {'dealId':'a','status':'OPENED'},{'dealId':'b','status':'OPENED'}]}
+        self.assertEqual(len(opened_deal_ids(confirmation)),2)
+
+    def test_close_eventual_absence(self):
+        n=[0]
+        def fetch():
+            n[0]+=1
+            return [{'position':{'dealId':'abc'}}] if n[0]<3 else []
+        self.assertTrue(wait_for_absence(fetch,'abc',attempts=4,
+                                        delay_seconds=0,sleep=lambda _:None))
+
+    def test_close_still_open(self):
+        fetch=lambda:[{'position':{'dealId':'abc'}}]
+        self.assertFalse(wait_for_absence(fetch,'abc',attempts=2,
+                                         delay_seconds=0,sleep=lambda _:None))
 
 if __name__=='__main__':
     unittest.main()
