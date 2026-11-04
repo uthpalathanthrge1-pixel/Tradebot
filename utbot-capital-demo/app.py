@@ -527,3 +527,36 @@ def gold_test_v2_preview(secret: str):
     except Exception:
         return {'preflight_passed': False, 'stage': 'preview_failed',
                 'new_order_submitted': False}
+
+@app.get('/gold-test-v2-simulation/{secret}')
+def gold_test_v2_simulation(secret: str):
+    """Offline broker-response simulation. No broker mutation or new order."""
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    from reconciliation import opened_deal_ids, wait_for_position, wait_for_absence
+    confirmation = {
+        'dealStatus':'ACCEPTED',
+        'dealId':'order-reference',
+        'affectedDeals':[{'dealId':'simulated-position','status':'OPENED'}]
+    }
+    ids = opened_deal_ids(confirmation)
+    opening_polls = [[],[],[{
+        'position':{'dealId':'simulated-position','direction':'BUY','size':0.01},
+        'market':{'epic':'GOLD'}}]]
+    def fetch_open():
+        return opening_polls.pop(0) if opening_polls else []
+    matched, diagnostic = wait_for_position(
+        fetch_open, ids[0] if len(ids)==1 else None, 'GOLD','BUY','0.01',
+        attempts=3,delay_seconds=0,sleep=lambda _:None)
+    closing_polls = [[{'position':{'dealId':'simulated-position'}}],[]]
+    def fetch_close():
+        return closing_polls.pop(0) if closing_polls else []
+    closed = bool(matched) and wait_for_absence(
+        fetch_close,ids[0],attempts=2,delay_seconds=0,sleep=lambda _:None)
+    return {'simulation_passed':bool(closed),
+            'correct_position_id_selected':ids==['simulated-position'],
+            'opening_poll':diagnostic.get('poll'),
+            'closure_verified_in_simulation':bool(closed),
+            'broker_close_api_live_verified':False,
+            'new_order_submitted':False,
+            'main_bot_orders_enabled':False}
