@@ -5,6 +5,8 @@ on:
       - 'utbot-capital-demo/close_validation.py'
       - 'utbot-capital-demo/reconciliation.py'
       - 'utbot-capital-demo/test_close_sequence_offline.py'
+      - 'utbot-capital-demo/test_capital_close_contract_offline.py'
+      - 'utbot-capital-demo/capital.py'
       - '.github/workflows/demo-close-safety.yml'
   workflow_dispatch:
 jobs:
@@ -19,4 +21,4 @@ jobs:
           python-version: '3.11'
       - name: Run offline close-sequence regression tests
         working-directory: utbot-capital-demo
-        run: python -m unittest -v test_close_sequence_offline
+        run: python -m unittest -v test_close_sequence_offline test_capital_close_contract_offline
