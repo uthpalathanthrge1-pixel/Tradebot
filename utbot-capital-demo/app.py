@@ -61,7 +61,7 @@ def status(secret: str):
 def capital_check(secret: str):
     if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
         raise HTTPException(403, 'Forbidden')
-    required = ('CAPITAL_API_KEY', 'CAPITAL_IDENTIFIER', 'CAPITAL_API_PASSWORD', 'CAPITAL_DEMO_ACCOUNT_ID')
+    required = ('CAPITAL_API_KEY', 'CAPITAL_IDENTIFIER', 'CAPITAL_API_PASSWORD')
     missing = [name for name in required if not os.environ.get(name)]
     if missing:
         return {'ready': False, 'missing_variables': missing, 'orders_enabled': False}
