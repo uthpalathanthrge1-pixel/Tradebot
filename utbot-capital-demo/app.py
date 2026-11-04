@@ -608,3 +608,44 @@ def dashboard(secret: str):
                                      'Referrer-Policy':'no-referrer',
                                      'X-Content-Type-Options':'nosniff',
                                      'Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'"})
+
+
+@app.get('/demo-execution-preflight/{secret}')
+def demo_execution_preflight(secret: str):
+    """Read-only gate: validate broker state and persistent risk lock. No orders."""
+    import secrets as secure
+    from decimal import Decimal
+    expected=os.environ.get('WEBHOOK_SECRET','')
+    if not expected or not secure.compare_digest(secret,expected):
+        raise HTTPException(403,'Forbidden')
+    from capital import Capital, CapitalCheckError
+    from risk_engine import RiskLedger
+    risk=RiskLedger(DB).state()
+    checks={'risk_halted':risk['halted'],
+            'risk_reason':risk['reason'],
+            'main_orders_disabled':os.getenv('ENABLE_DEMO_ORDERS','false').lower()=='false',
+            'sizing_verified':False,
+            'automatic_close_verified':False,
+            'broker_gbp_pnl_verified':False,
+            'continuous_risk_monitor_running':False}
+    try:
+        client=Capital()
+        account=client.account_check()
+        checks['unique_gbp_cfd_demo']=bool(account.get('configured_account_found') and
+             account.get('account_currency')=='GBP' and account.get('account_type')=='CFD')
+        positions=client.positions()
+        checks['zero_open_positions']=len(positions)==0
+        checks['open_position_count']=len(positions)
+        with db() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS one_off_tests (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL, deal_ref TEXT, deal_id TEXT)')
+            previous=conn.execute('SELECT state FROM one_off_tests WHERE id=1').fetchone()
+        checks['previous_test_state']=previous[0] if previous else 'not_started'
+        checks['previous_test_lock_preserved']=bool(previous)
+    except CapitalCheckError as exc:
+        return {'ready_to_enable':False,'checks':checks,'error_stage':exc.stage,
+                'http_status':exc.status,'orders_submitted':False}
+    except Exception:
+        return {'ready_to_enable':False,'checks':checks,'error_stage':'preflight_failed',
+                'orders_submitted':False}
+    return {'ready_to_enable':False,'checks':checks,'orders_submitted':False,
+            'next_step':'Validate broker close semantics, contract sizing and net GBP P/L in isolated approved demo tests before enabling execution.'}
