@@ -80,6 +80,26 @@ class Capital:
             "no_orders_submitted": True,
         }
 
+    def active_account_check(self):
+        """Verify the API session is on the same unique GBP CFD account.
+
+        Account discovery alone does not select the session's active account.
+        Fail closed when the session omits its currentAccountId.
+        """
+        accounts = self.get("/accounts").get("accounts", [])
+        gbp = [a for a in accounts if str(a.get("currency", "")).upper() == "GBP"
+               and str(a.get("accountType", "")).upper() == "CFD"]
+        if len(gbp) != 1 or not gbp[0].get("accountId"):
+            return {"active_account_verified": False,
+                    "reason": "unique_gbp_cfd_account_not_identified"}
+        session = self.get("/session")
+        active_id = session.get("currentAccountId")
+        if not active_id or str(active_id) != str(gbp[0]["accountId"]):
+            return {"active_account_verified": False,
+                    "reason": "active_session_account_not_verified"}
+        return {"active_account_verified": True,
+                "account_currency": "GBP", "account_type": "CFD"}
+
     def request(self, method, path, payload=None, params=None):
         """Demo-only API request. Mutating methods must be called only by approved engine."""
         if not self.tokens:
