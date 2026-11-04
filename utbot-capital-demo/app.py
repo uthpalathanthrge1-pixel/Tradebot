@@ -158,3 +158,49 @@ def discover_markets(secret: str):
         return {'ready': False, 'stage': exc.stage, 'http_status': exc.status, 'orders_enabled': False}
     except Exception:
         return {'ready': False, 'stage': 'market_discovery_failed', 'orders_enabled': False}
+
+@app.get('/contract-specs/{secret}')
+def contract_specs(secret: str):
+    """Read-only instrument specification inspection; does not size or submit orders."""
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    from capital import Capital, CapitalCheckError
+    try:
+        client = Capital()
+        account = client.account_check()
+        if not account.get('configured_account_found') or account.get('account_type') != 'CFD':
+            return {'ready': False, 'reason': 'gbp_cfd_demo_not_verified', 'orders_enabled': False}
+        specs = {}
+        for label, expected in [('GOLD', 'GOLD'), ('OIL', 'OIL_CRUDE')]:
+            epic = os.getenv('CAPITAL_' + label + '_EPIC', '')
+            if epic != expected:
+                specs[label] = {'configured': False, 'expected_epic': expected}
+                continue
+            detail = client.market_details(epic)
+            instrument = detail.get('instrument', {})
+            dealing = detail.get('dealingRules', {})
+            snapshot = detail.get('snapshot', {})
+            specs[label] = {
+                'configured': True,
+                'epic': instrument.get('epic'),
+                'name': instrument.get('name'),
+                'type': instrument.get('type'),
+                'market_status': snapshot.get('marketStatus'),
+                'bid': snapshot.get('bid'),
+                'offer': snapshot.get('offer'),
+                'lot_size': instrument.get('lotSize'),
+                'contract_size': instrument.get('contractSize'),
+                'margin_factor': instrument.get('marginFactor'),
+                'margin_factor_unit': instrument.get('marginFactorUnit'),
+                'min_deal_size': dealing.get('minDealSize'),
+                'max_deal_size': dealing.get('maxDealSize'),
+                'min_step_distance': dealing.get('minStepDistance'),
+                'currencies': instrument.get('currencies'),
+            }
+        return {'ready': True, 'specifications': specs,
+                'margin_target_gbp_each': 1000, 'orders_enabled': False,
+                'note': 'Read-only broker values. No order size has been calculated or approved.'}
+    except CapitalCheckError as exc:
+        return {'ready': False, 'stage': exc.stage, 'http_status': exc.status, 'orders_enabled': False}
+    except Exception:
+        return {'ready': False, 'stage': 'contract_spec_lookup_failed', 'orders_enabled': False}
