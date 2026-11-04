@@ -35,10 +35,12 @@ class RiskLedger:
 
     def add_realised(self, amount_gbp):
         amount = Decimal(str(amount_gbp))
-        with self.lock, self.connection() as db:
-            db.execute("UPDATE risk_state SET realised_gbp=CAST(realised_gbp AS REAL)+? WHERE id=1", (float(amount),))
+        with self.lock:
             state = self.state()
-            if state['realised_gbp'] <= Decimal('-100'):
+            total = state['realised_gbp'] + amount
+            with self.connection() as db:
+                db.execute("UPDATE risk_state SET realised_gbp=? WHERE id=1", (str(total),))
+            if total <= Decimal('-100'):
                 self.halt('realised_loss_limit')
         return self.state()
 
