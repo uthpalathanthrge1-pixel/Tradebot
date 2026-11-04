@@ -1,0 +1,22 @@
+name: Offline demo close safety tests
+on:
+  push:
+    paths:
+      - 'utbot-capital-demo/close_validation.py'
+      - 'utbot-capital-demo/reconciliation.py'
+      - 'utbot-capital-demo/test_close_sequence_offline.py'
+      - '.github/workflows/demo-close-safety.yml'
+  workflow_dispatch:
+jobs:
+  close-safety:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run offline close-sequence regression tests
+        working-directory: utbot-capital-demo
+        run: python -m unittest -v test_close_sequence_offline
