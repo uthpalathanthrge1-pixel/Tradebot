@@ -13,7 +13,8 @@ def probe_history(capital_client, *, today=None, lookback_days=1):
     end = today or date.today()
     if not isinstance(end, date):
         raise ValueError('today must be a date')
-    # Keep the initial history window narrow to avoid broker range limits.\n    start = end - timedelta(days=lookback_days)
+    # Keep the initial history window narrow.
+    start = end - timedelta(days=lookback_days)
     # Uses existing read-only Capital.activity() adapter. Its query semantics
     # still need confirmation against the broker's API documentation.
     raw = capital_client.activity(start.isoformat(), end.isoformat())
