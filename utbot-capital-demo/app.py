@@ -279,3 +279,119 @@ def gold_test_preview(secret: str):
     except Exception:
         return {'ready': False, 'stage': 'gold_test_preflight_failed',
                 'orders_enabled': False}
+
+@app.post('/one-off-gold-test')
+def one_off_gold_test(request: Request):
+    """Single-use controlled DEMO test. No TradingView signal can call this."""
+    import secrets, time
+    from capital import Capital, CapitalCheckError
+    from risk_engine import RiskLedger
+    from fastapi import Header
+    # Separate test authorisation header, not the webhook URL secret.
+    key = request.headers.get('X-DEMO-TEST-KEY', '')
+    expected = os.environ.get('DEMO_TEST_KEY', '')
+    if not expected or len(expected) < 24 or not secrets.compare_digest(key, expected):
+        raise HTTPException(403, 'Test authorisation required')
+    if os.environ.get('ALLOW_ONE_OFF_GOLD_TEST') != 'true':
+        raise HTTPException(409, 'One-off test disabled')
+    with lock:
+        with db() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS one_off_tests (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL, deal_ref TEXT, deal_id TEXT)')
+            old = conn.execute('SELECT state FROM one_off_tests WHERE id=1').fetchone()
+            if old:
+                raise HTTPException(409, 'One-off test already attempted; manual review required')
+            # Mark as used BEFORE any broker mutation; never retry automatically.
+            conn.execute("INSERT INTO one_off_tests(id,state) VALUES(1,'started')")
+        client = Capital()
+        def record(state, ref=None, deal=None):
+            with db() as conn:
+                conn.execute('UPDATE one_off_tests SET state=?,deal_ref=COALESCE(?,deal_ref),deal_id=COALESCE(?,deal_id) WHERE id=1',
+                             (state,ref,deal))
+        try:
+            account = client.account_check()
+            if not account.get('configured_account_found') or account.get('account_type') != 'CFD':
+                record('account_verification_failed')
+                return {'state':'account_verification_failed','orders_enabled':False}
+            if client.positions():
+                record('existing_positions')
+                return {'state':'existing_positions','orders_enabled':False}
+            detail = client.market_details('GOLD')
+            instrument, snapshot, rules = detail.get('instrument',{}), detail.get('snapshot',{}), detail.get('dealingRules',{})
+            if (instrument.get('epic') != 'GOLD' or instrument.get('type') != 'COMMODITIES'
+                    or snapshot.get('marketStatus') != 'TRADEABLE'
+                    or float(rules.get('minDealSize',{}).get('value',-1)) != 0.01):
+                record('market_preflight_failed')
+                return {'state':'market_preflight_failed','orders_enabled':False}
+            if not RiskLedger(DB).state()['halted']:
+                record('main_bot_not_halted')
+                return {'state':'main_bot_not_halted','orders_enabled':False}
+            record('submitting_buy')
+            opened = client.open_position('GOLD','BUY',0.01)
+            reference = opened.get('dealReference')
+            record('buy_submitted', reference)
+            if not reference:
+                record('buy_uncertain')
+                return {'state':'buy_uncertain','manual_check_required':True}
+            confirmation = None
+            for _ in range(5):
+                try:
+                    confirmation = client.confirm(reference)
+                    break
+                except CapitalCheckError as exc:
+                    if exc.status != 404:
+                        raise
+                    time.sleep(1)
+            if not confirmation or confirmation.get('dealStatus') != 'ACCEPTED':
+                record('buy_unconfirmed')
+                return {'state':'buy_unconfirmed','manual_check_required':True}
+            deal_id = confirmation.get('dealId')
+            if not deal_id:
+                for item in confirmation.get('affectedDeals',[]):
+                    if item.get('status') == 'OPENED':
+                        deal_id = item.get('dealId')
+                        break
+            record('buy_confirmed',reference,deal_id)
+            if not deal_id:
+                return {'state':'buy_confirmed_missing_deal_id','manual_check_required':True}
+            # Verify the exact deal exists before issuing the close.
+            matches = [p for p in client.positions()
+                       if p.get('position',{}).get('dealId') == deal_id
+                       and p.get('market',{}).get('epic') == 'GOLD']
+            if len(matches) != 1:
+                record('position_reconciliation_failed')
+                return {'state':'position_reconciliation_failed','manual_check_required':True}
+            record('submitting_close')
+            closed = client.close_position(deal_id)
+            close_ref = closed.get('dealReference')
+            record('close_submitted')
+            if not close_ref:
+                return {'state':'close_uncertain','manual_check_required':True}
+            close_confirmation = None
+            for _ in range(5):
+                try:
+                    close_confirmation = client.confirm(close_ref)
+                    break
+                except CapitalCheckError as exc:
+                    if exc.status != 404:
+                        raise
+                    time.sleep(1)
+            still_open = any(p.get('position',{}).get('dealId') == deal_id for p in client.positions())
+            if still_open or not close_confirmation or close_confirmation.get('dealStatus') != 'ACCEPTED':
+                record('close_unconfirmed')
+                return {'state':'close_unconfirmed','manual_check_required':True}
+            record('closed_confirmed')
+            return {'state':'closed_confirmed','gold_size':0.01,'main_bot_orders_enabled':False}
+        except Exception:
+            record('error_manual_reconciliation_required')
+            return {'state':'error_manual_reconciliation_required',
+                    'manual_check_required':True,'main_bot_orders_enabled':False}
+
+@app.get('/one-off-gold-test-status/{secret}')
+def one_off_gold_test_status(secret: str):
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS one_off_tests (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL, deal_ref TEXT, deal_id TEXT)')
+        row=conn.execute('SELECT state FROM one_off_tests WHERE id=1').fetchone()
+    return {'test_state': row[0] if row else 'not_started',
+            'main_bot_orders_enabled':False}
