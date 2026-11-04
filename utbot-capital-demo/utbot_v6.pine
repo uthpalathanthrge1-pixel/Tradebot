@@ -1,0 +1,20 @@
+//@version=6
+indicator("UT Bot 1m Reversal Webhooks", overlay=true)
+a = input.float(2.0, "ATR sensitivity", minval=0.1)
+c = input.int(10, "ATR period", minval=1)
+atrValue = ta.atr(c)
+nLoss = a * atrValue
+var float trailing = na
+prev = nz(trailing[1], close)
+trailing := close > prev and close[1] > prev ? math.max(prev, close - nLoss) : close < prev and close[1] < prev ? math.min(prev, close + nLoss) : close > prev ? close - nLoss : close + nLoss
+ema1 = ta.ema(close, 1)
+buy = close > trailing and ta.crossover(ema1, trailing)
+sell = close < trailing and ta.crossunder(ema1, trailing)
+plot(trailing, "UT trailing stop", color=color.orange)
+plotshape(buy, "BUY", shape.labelup, location.belowbar, color.green, text="BUY", textcolor=color.white, size=size.tiny)
+plotshape(sell, "SELL", shape.labeldown, location.abovebar, color.red, text="SELL", textcolor=color.white, size=size.tiny)
+if barstate.isconfirmed and timeframe.period == "1"
+    if buy
+        alert('{"symbol":"' + syminfo.ticker + '","direction":"BUY","bar_time":' + str.tostring(time) + '}', alert.freq_once_per_bar_close)
+    if sell
+        alert('{"symbol":"' + syminfo.ticker + '","direction":"SELL","bar_time":' + str.tostring(time) + '}', alert.freq_once_per_bar_close)
