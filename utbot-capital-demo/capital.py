@@ -4,6 +4,12 @@ Never send orders until account and risk engine are separately validated.
 import os
 import requests
 
+class CapitalCheckError(Exception):
+    def __init__(self, stage, status=None):
+        super().__init__(stage)
+        self.stage = stage
+        self.status = status
+
 BASE = "https://demo-api-capital.backend-capital.com/api/v1"
 
 class Capital:
@@ -23,7 +29,10 @@ class Capital:
             },
             timeout=10,
         )
-        r.raise_for_status()
+        if not r.ok:
+            raise CapitalCheckError("session_login", r.status_code)
+        if not r.headers.get("CST") or not r.headers.get("X-SECURITY-TOKEN"):
+            raise CapitalCheckError("session_tokens_missing", r.status_code)
         self.tokens = {
             "CST": r.headers["CST"],
             "X-SECURITY-TOKEN": r.headers["X-SECURITY-TOKEN"],
@@ -32,12 +41,16 @@ class Capital:
     def get(self, path):
         if not self.tokens:
             self.login()
-        r = self.http.get(BASE + path, headers=self.tokens, timeout=10)
+        r = self.http.get(BASE + path, headers={**self.tokens, "X-CAP-API-KEY": os.environ["CAPITAL_API_KEY"]}, timeout=10)
         if r.status_code in (401, 403):
             self.login()
             r = self.http.get(BASE + path, headers=self.tokens, timeout=10)
-        r.raise_for_status()
-        return r.json()
+        if not r.ok:
+            raise CapitalCheckError("accounts_lookup", r.status_code)
+        try:
+            return r.json()
+        except ValueError:
+            raise CapitalCheckError("accounts_invalid_response", r.status_code)
 
     def account_check(self):
         # Account discovery is read-only. Never guess if multiple GBP accounts exist.
