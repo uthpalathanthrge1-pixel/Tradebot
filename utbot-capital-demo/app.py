@@ -733,6 +733,7 @@ def broker_history_probe_view(secret: str):
         return probe_history(Capital(),lookback_days=7)
     except CapitalCheckError as exc:
         return {'ready':False,'stage':exc.stage,'http_status':exc.status,
+                'broker_error_code':exc.error_code,
                 'orders_submitted':False,'journal_updated':False}
     except Exception as exc:
         # Report only the exception class; exception text may contain credentials,
