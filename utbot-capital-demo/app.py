@@ -718,3 +718,22 @@ def demo_risk_monitor_view(secret: str):
     except Exception:
         return {'ready_to_trade':False,'must_halt':True,
                 'reason':'risk_inspection_failed','orders_submitted':False}
+
+
+@app.get('/broker-history-probe/{secret}')
+def broker_history_probe_view(secret: str):
+    """Authenticated, read-only schema probe. No raw transactions exposed."""
+    import secrets as secure
+    expected=os.environ.get('WEBHOOK_SECRET','')
+    if not expected or not secure.compare_digest(secret,expected):
+        raise HTTPException(403,'Forbidden')
+    from capital import Capital, CapitalCheckError
+    from broker_history_probe import probe_history
+    try:
+        return probe_history(Capital(),lookback_days=7)
+    except CapitalCheckError as exc:
+        return {'ready':False,'stage':exc.stage,'http_status':exc.status,
+                'orders_submitted':False,'journal_updated':False}
+    except Exception:
+        return {'ready':False,'stage':'broker_history_probe_failed',
+                'orders_submitted':False,'journal_updated':False}
