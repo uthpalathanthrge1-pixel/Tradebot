@@ -117,6 +117,22 @@ class Capital:
         return self.request("POST", "/positions",
                             {"epic": epic, "direction": direction, "size": size})
 
+    def open_protected_position(self, epic, direction, size, stop_distance):
+        """Submit a DEMO market order with a broker-side stop in the same POST.
+
+        Caller must supply broker-verified stop distance and risk budget.
+        Never automatically retry this mutating request.
+        """
+        from decimal import Decimal
+        stop = Decimal(str(stop_distance))
+        if not stop.is_finite() or stop <= 0:
+            raise ValueError('invalid_stop_distance')
+        return self.request("POST", "/positions", {
+            "epic": epic, "direction": direction, "size": str(size),
+            "orderType": "MARKET", "guaranteedStop": False,
+            "stopDistance": float(stop),
+        })
+
     def close_position(self, deal_id):
         from urllib.parse import quote
         return self.request("DELETE", "/positions/" + quote(deal_id, safe=""))
