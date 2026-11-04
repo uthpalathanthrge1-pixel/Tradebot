@@ -14,7 +14,7 @@ button,select{background:#1c2942;border:1px solid #3b4b68;color:var(--ink);paddi
 <section class="cards" aria-label="Performance summary"><div class="card"><div class="label">Closed paper trades</div><div class="value" id="closed">—</div></div><div class="card"><div class="label">Win rate</div><div class="value" id="rate">—</div></div><div class="card"><div class="label">Winning / losing</div><div class="value" id="record">—</div></div><div class="card"><div class="label">Open paper positions</div><div class="value" id="open">—</div></div></section>
 <section class="layout"><div class="panel"><h2>Trade outcomes</h2><div class="bar" aria-label="Wins and losses"><div class="win" id="winbar"></div><div class="loss" id="lossbar"></div></div><div class="legend"><span><i class="dot" style="background:var(--green)"></i><span id="wincount">0</span> wins</span><span><i class="dot" style="background:var(--red)"></i><span id="losscount">0</span> losses</span><span><i class="dot" style="background:#8b9ab4"></i><span id="unpriced">0</span> unpriced</span></div><p class="notice">Points are calculated from TradingView bar-close prices, not broker fills. No GBP P&amp;L is implied.</p></div>
 <div class="panel"><h2>Market breakdown</h2><div id="markets"><div class="empty">Waiting for signals…</div></div></div></section>
-<section class="panel tablepanel"><div class="top"><h2>Trade history</h2><div class="small muted" id="updated">Loading…</div></div><div class="tablewrap"><table><thead><tr><th>Market</th><th>Side</th><th>Entry (UTC)</th><th>Entry price</th><th>Exit (UTC)</th><th>Exit price</th><th>Points</th><th>Outcome</th></tr></thead><tbody id="trades"></tbody></table></div><div id="empty" class="empty" hidden>No paper trades recorded yet. Send a TradingView alert containing a price.</div></section>
+<section class="panel tablepanel"><div class="top"><h2>All trades — individual P/L</h2><div class="small muted" id="updated">Loading…</div></div><div class="tablewrap"><table><thead><tr><th>#</th><th>Market</th><th>Side</th><th>Entry (UTC)</th><th>Entry price</th><th>Exit (UTC)</th><th>Exit price</th><th>Profit / loss (points)</th><th>Outcome</th></tr></thead><tbody id="trades"></tbody></table></div><div id="empty" class="empty" hidden>No paper trades recorded yet. Send a TradingView alert containing a price.</div></section>
 <footer class="foot">This dashboard tracks actual webhook signals and hypothetical reversals. It does not execute trades or include spreads, commissions, slippage or financing. Trades without both prices are unpriced. Older signals received before journal activation are not reconstructed. <span id="status"></span></footer>
 </main><script>
 "use strict";
@@ -61,8 +61,9 @@ function render(){
  const body=el('trades');body.replaceChildren();el('empty').hidden=trades.length!==0;
  for(const t of trades){
  const row=document.createElement('tr');
- const cells=[t.symbol,t.direction,dt(t.entry_time),fmt(t.entry_price),dt(t.exit_time),fmt(t.exit_price),fmt(t.points),t.outcome];
- cells.forEach((value,i)=>{const cell=document.createElement('td');if(i===7){const badge=document.createElement('span');badge.className='pill '+(value==='WIN'?'win':value==='LOSS'?'loss':'open');put(badge,value);cell.append(badge)}else{put(cell,value);if(i===6&&t.points!=null)cell.className=Number(t.points)>0?'good':Number(t.points)<0?'bad':''}row.append(cell)});
+ const signed=t.points==null?'Pending':(Number(t.points)>0?'+':'')+t.points;
+ const cells=[t.id,t.symbol,t.direction,dt(t.entry_time),fmt(t.entry_price),dt(t.exit_time),fmt(t.exit_price),signed,t.outcome];
+ cells.forEach((value,i)=>{const cell=document.createElement('td');if(i===8){const badge=document.createElement('span');badge.className='pill '+(value==='WIN'?'win':value==='LOSS'?'loss':'open');put(badge,value);cell.append(badge)}else{put(cell,value);if(i===7&&t.points!=null)cell.className=Number(t.points)>0?'good':Number(t.points)<0?'bad':''}row.append(cell)});
  body.append(row);
  }
  put(el('updated'),'Updated '+new Date().toLocaleTimeString());
