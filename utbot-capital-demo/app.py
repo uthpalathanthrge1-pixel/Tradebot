@@ -593,3 +593,18 @@ def journal(secret: str):
     from signal_journal import report
     with db() as conn:
         return report(conn)
+
+@app.get('/dashboard/{secret}')
+def dashboard(secret: str):
+    """Private, responsive signal journal UI; no trading actions."""
+    import secrets as secure
+    from pathlib import Path
+    from fastapi.responses import HTMLResponse
+    expected=os.environ.get('WEBHOOK_SECRET','')
+    if not expected or not secure.compare_digest(secret,expected):
+        raise HTTPException(403,'Forbidden')
+    page=Path(__file__).with_name('dashboard.html').read_text(encoding='utf-8')
+    return HTMLResponse(page,headers={'Cache-Control':'no-store',
+                                     'Referrer-Policy':'no-referrer',
+                                     'X-Content-Type-Options':'nosniff',
+                                     'Content-Security-Policy':"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'"})
