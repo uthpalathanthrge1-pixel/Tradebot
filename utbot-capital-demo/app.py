@@ -56,3 +56,18 @@ def status(secret: str):
     with db() as conn:
         alerts = conn.execute('SELECT symbol,bar_time,direction FROM alerts ORDER BY bar_time DESC LIMIT 20').fetchall()
     return {'halted':True, 'signals':[{'symbol':a,'bar_time':b,'direction':c} for a,b,c in alerts], 'note':'signal-only validation; no orders submitted'}
+
+@app.get('/capital-check/{secret}')
+def capital_check(secret: str):
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    required = ('CAPITAL_API_KEY', 'CAPITAL_IDENTIFIER', 'CAPITAL_API_PASSWORD', 'CAPITAL_DEMO_ACCOUNT_ID')
+    missing = [name for name in required if not os.environ.get(name)]
+    if missing:
+        return {'ready': False, 'missing_variables': missing, 'orders_enabled': False}
+    from capital import Capital
+    try:
+        info = Capital().account_check()
+        return {'ready': True, 'account': info, 'orders_enabled': False}
+    except Exception:
+        return {'ready': False, 'error': 'Capital.com demo authentication or account verification failed; check Render logs', 'orders_enabled': False}
