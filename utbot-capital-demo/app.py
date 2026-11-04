@@ -395,3 +395,40 @@ def one_off_gold_test_status(secret: str):
         row=conn.execute('SELECT state FROM one_off_tests WHERE id=1').fetchone()
     return {'test_state': row[0] if row else 'not_started',
             'main_bot_orders_enabled':False}
+
+@app.get('/gold-test-reconcile/{secret}')
+def gold_test_reconcile(secret: str):
+    """Read-only, sanitized broker position reconciliation; never closes orders."""
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    from capital import Capital, CapitalCheckError
+    try:
+        with db() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS one_off_tests (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL, deal_ref TEXT, deal_id TEXT)')
+            row=conn.execute('SELECT state,deal_id FROM one_off_tests WHERE id=1').fetchone()
+        if not row:
+            return {'test_state':'not_started','orders_enabled':False}
+        state, stored_id=row
+        positions=Capital().positions()
+        matches=[p for p in positions if p.get('position',{}).get('dealId') == stored_id]
+        gold=[p for p in positions if p.get('market',{}).get('epic') == 'GOLD']
+        return {
+            'test_state':state,
+            'broker_position_count':len(positions),
+            'gold_position_count':len(gold),
+            'stored_deal_id_present':bool(stored_id),
+            'stored_deal_id_matches_open_position':len(matches)==1,
+            'gold_positions':[{
+                'direction':p.get('position',{}).get('direction'),
+                'size':p.get('position',{}).get('size'),
+                'deal_id_matches_test':p.get('position',{}).get('dealId')==stored_id,
+                'position_keys':sorted(p.get('position',{}).keys()),
+                'market_keys':sorted(p.get('market',{}).keys())
+            } for p in gold[:5]],
+            'orders_enabled':False,
+            'action':'Check and close any test Gold position manually in Capital.com; do not rerun test.'
+        }
+    except CapitalCheckError as exc:
+        return {'ready':False,'stage':exc.stage,'http_status':exc.status,'orders_enabled':False}
+    except Exception:
+        return {'ready':False,'stage':'reconciliation_read_failed','orders_enabled':False}
