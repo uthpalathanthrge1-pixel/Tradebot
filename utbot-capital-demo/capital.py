@@ -44,7 +44,7 @@ class Capital:
         r = self.http.get(BASE + path, headers={**self.tokens, "X-CAP-API-KEY": os.environ["CAPITAL_API_KEY"]}, timeout=10)
         if r.status_code in (401, 403):
             self.login()
-            r = self.http.get(BASE + path, headers=self.tokens, timeout=10)
+            r = self.http.get(BASE + path, headers={**self.tokens, "X-CAP-API-KEY": os.environ["CAPITAL_API_KEY"]}, timeout=10)
         if not r.ok:
             raise CapitalCheckError("accounts_lookup", r.status_code)
         try:
@@ -78,3 +78,44 @@ class Capital:
             "available_accounts_count": len(accounts),
             "no_orders_submitted": True,
         }
+
+    def request(self, method, path, payload=None, params=None):
+        """Demo-only API request. Mutating methods must be called only by approved engine."""
+        if not self.tokens:
+            self.login()
+        headers = {**self.tokens, "X-CAP-API-KEY": os.environ["CAPITAL_API_KEY"]}
+        r = self.http.request(method, BASE + path, headers=headers,
+                              json=payload, params=params, timeout=12)
+        if r.status_code in (401, 403) and method == "GET":
+            self.login()
+            headers = {**self.tokens, "X-CAP-API-KEY": os.environ["CAPITAL_API_KEY"]}
+            r = self.http.request(method, BASE + path, headers=headers,
+                                  json=payload, params=params, timeout=12)
+        if not r.ok:
+            raise CapitalCheckError("broker_" + method.lower(), r.status_code)
+        return r.json()
+
+    def market_search(self, query):
+        return self.request("GET", "/markets", params={"searchTerm": query})
+
+    def market_details(self, epic):
+        from urllib.parse import quote
+        return self.request("GET", "/markets/" + quote(epic, safe=""))
+
+    def preferences(self):
+        return self.get("/accounts/preferences")
+
+    def positions(self):
+        return self.get("/positions").get("positions", [])
+
+    def confirm(self, reference):
+        from urllib.parse import quote
+        return self.request("GET", "/confirms/" + quote(reference, safe=""))
+
+    def open_position(self, epic, direction, size):
+        return self.request("POST", "/positions",
+                            {"epic": epic, "direction": direction, "size": size})
+
+    def close_position(self, deal_id):
+        from urllib.parse import quote
+        return self.request("DELETE", "/positions/" + quote(deal_id, safe=""))
