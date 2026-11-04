@@ -471,3 +471,59 @@ def gold_test_followup(secret: str):
         return {'ready_for_new_order':False,'stage':exc.stage,'http_status':exc.status}
     except Exception:
         return {'ready_for_new_order':False,'stage':'followup_read_failed'}
+
+@app.get('/gold-test-v2-preview/{secret}')
+def gold_test_v2_preview(secret: str):
+    """Read-only preflight for a separately authorised second Gold demo test.
+
+    Does not unlock, arm, submit or close any order.
+    """
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    from capital import Capital, CapitalCheckError
+    from risk_engine import RiskLedger
+    try:
+        client = Capital()
+        account = client.account_check()
+        positions = client.positions()
+        detail = client.market_details('GOLD')
+        instrument = detail.get('instrument') or {}
+        snapshot = detail.get('snapshot') or {}
+        rules = detail.get('dealingRules') or {}
+        min_size = (rules.get('minDealSize') or {}).get('value')
+        try:
+            from decimal import Decimal
+            size_allowed = min_size is not None and Decimal(str(min_size)) <= Decimal('0.01')
+        except Exception:
+            size_allowed = False
+        account_ok = bool(account.get('configured_account_found') and account.get('account_type') == 'CFD')
+        market_ok = (instrument.get('epic') == 'GOLD' and
+                     instrument.get('type') == 'COMMODITIES' and
+                     snapshot.get('marketStatus') == 'TRADEABLE')
+        no_positions = len(positions) == 0
+        halted = bool(RiskLedger(DB).state()['halted'])
+        with db() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS one_off_tests (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL, deal_ref TEXT, deal_id TEXT)')
+            old = conn.execute('SELECT state FROM one_off_tests WHERE id=1').fetchone()
+        return {
+            'preflight_passed': account_ok and market_ok and size_allowed and no_positions and halted,
+            'account_verified': account_ok,
+            'gold_market_tradeable': market_ok,
+            'gold_min_size': min_size,
+            'test_size': '0.01',
+            'test_size_allowed': size_allowed,
+            'open_position_count': len(positions),
+            'main_bot_halted': halted,
+            'previous_test_state': old[0] if old else 'not_started',
+            'previous_test_lock_preserved': bool(old),
+            'v2_order_execution_available': False,
+            'close_api_live_verified': False,
+            'new_order_submitted': False,
+            'next_step': 'Review preflight and separately authorise creation of a one-use execution endpoint.'
+        }
+    except CapitalCheckError as exc:
+        return {'preflight_passed': False, 'stage': exc.stage,
+                'http_status': exc.status, 'new_order_submitted': False}
+    except Exception:
+        return {'preflight_passed': False, 'stage': 'preview_failed',
+                'new_order_submitted': False}
