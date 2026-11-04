@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<title>UT Bot | Signal Journal</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#151d30;--edge:#29344c;--ink:#edf3ff;--muted:#9aaac5;--green:#36d5a2;--red:#ff7589;--blue:#75a8ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% -10%,#243b67 0,transparent 35%),var(--bg);color:var(--ink);font:15px system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1260px;margin:auto;padding:30px 24px 60px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.brand{font-size:24px;font-weight:800;letter-spacing:-.6px}.brand span{color:var(--blue)}.subtitle,.muted{color:var(--muted)}.subtitle{margin-top:7px}.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button,select{background:#1c2942;border:1px solid #3b4b68;color:var(--ink);padding:10px 14px;border-radius:11px;font:inherit;cursor:pointer}button:hover{background:#293b5c}button:focus-visible,select:focus-visible{outline:2px solid var(--blue)}.tag{font-size:12px;border:1px solid #47618d;border-radius:20px;padding:7px 11px;color:#bcd3ff}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:28px 0}.card,.panel{background:linear-gradient(155deg,#19243a,#111a2c);border:1px solid var(--edge);border-radius:18px;padding:22px;box-shadow:0 10px 35px #0002}.card .label{font-size:13px;color:var(--muted)}.value{font-size:32px;font-weight:780;letter-spacing:-1px;margin-top:11px}.good{color:var(--green)}.bad{color:var(--red)}.layout{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}.panel h2{font-size:17px;margin:0 0 18px}.bar{height:14px;background:#29364f;border-radius:20px;display:flex;overflow:hidden}.bar .win{background:var(--green)}.bar .loss{background:var(--red)}.legend{display:flex;gap:20px;margin-top:15px;flex-wrap:wrap;color:var(--muted)}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}.market{display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--edge)}.market:last-child{border:0}.market strong{font-size:18px}.tablepanel{margin-top:16px;overflow:hidden}.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;text-align:left;white-space:nowrap}th{font-size:12px;color:var(--muted);font-weight:600;padding:13px 10px;border-bottom:1px solid var(--edge)}td{padding:15px 10px;border-bottom:1px solid #253047}tbody tr:last-child td{border:0}.pill{border-radius:8px;padding:5px 9px;font-size:12px;font-weight:750;background:#29344a}.pill.win{color:var(--green);background:#153b36}.pill.loss{color:var(--red);background:#442535}.pill.open{color:#a9c5ff;background:#253656}.empty{padding:30px;color:var(--muted);text-align:center}.foot{margin-top:22px;color:var(--muted);font-size:12px;line-height:1.7}.notice{color:#ffcd82;margin-top:12px;font-size:13px}.small{font-size:13px}.error{color:var(--red)}@media(max-width:850px){.cards{grid-template-columns:repeat(2,1fr)}.layout{grid-template-columns:1fr}}@media(max-width:500px){main{padding:20px 12px}.cards{gap:10px}.card,.panel{padding:16px}.value{font-size:25px}}
+</style></head><body><main>
+<header class="top"><div><div class="brand">UT<span>BOT</span> <span style="color:#fff;font-weight:400">/ Signal Journal</span></div><div class="subtitle">Gold &amp; Oil · TradingView alerts · Paper performance</div></div>
+<div class="controls"><span class="tag">● SIGNAL ONLY · NO ORDERS</span><select id="market" aria-label="Filter market"><option value="ALL">All markets</option></select><button id="refresh">↻ Refresh</button></div></header>
+<section class="cards" aria-label="Performance summary"><div class="card"><div class="label">Closed paper trades</div><div class="value" id="closed">—</div></div><div class="card"><div class="label">Win rate</div><div class="value" id="rate">—</div></div><div class="card"><div class="label">Winning / losing</div><div class="value" id="record">—</div></div><div class="card"><div class="label">Open paper positions</div><div class="value" id="open">—</div></div></section>
+<section class="layout"><div class="panel"><h2>Trade outcomes</h2><div class="bar" aria-label="Wins and losses"><div class="win" id="winbar"></div><div class="loss" id="lossbar"></div></div><div class="legend"><span><i class="dot" style="background:var(--green)"></i><span id="wincount">0</span> wins</span><span><i class="dot" style="background:var(--red)"></i><span id="losscount">0</span> losses</span><span><i class="dot" style="background:#8b9ab4"></i><span id="unpriced">0</span> unpriced</span></div><p class="notice">Points are calculated from TradingView bar-close prices, not broker fills. No GBP P&amp;L is implied.</p></div>
+<div class="panel"><h2>Market breakdown</h2><div id="markets"><div class="empty">Waiting for signals…</div></div></div></section>
+<section class="panel tablepanel"><div class="top"><h2>Trade history</h2><div class="small muted" id="updated">Loading…</div></div><div class="tablewrap"><table><thead><tr><th>Market</th><th>Side</th><th>Entry (UTC)</th><th>Entry price</th><th>Exit (UTC)</th><th>Exit price</th><th>Points</th><th>Outcome</th></tr></thead><tbody id="trades"></tbody></table></div><div id="empty" class="empty" hidden>No paper trades recorded yet. Send a TradingView alert containing a price.</div></section>
+<footer class="foot">This dashboard tracks actual webhook signals and hypothetical reversals. It does not execute trades or include spreads, commissions, slippage or financing. Trades without both prices are unpriced. Older signals received before journal activation are not reconstructed. <span id="status"></span></footer>
+</main><script>
+"use strict";
+const el=id=>document.getElementById(id);
+const secret=decodeURIComponent(location.pathname.split('/').pop());
+let latest=null;
+const fmt=n=>n===null||n===undefined?'—':String(n);
+const dt=n=>n==null?'—':new Date(Number(n)<1e11?Number(n)*1000:Number(n)).toISOString().slice(0,16).replace('T',' ');
+function put(node,value){node.textContent=value}
+function draw(data){
+ latest=data;
+ const previous=el('market').value;
+ const names=[...new Set(data.trades.map(t=>t.symbol))].sort();
+ el('market').replaceChildren(new Option('All markets','ALL'),...names.map(n=>new Option(n,n)));
+ el('market').value=names.includes(previous)?previous:'ALL';
+ render();
+}
+function render(){
+ if(!latest)return;
+ const selected=el('market').value;
+ const trades=latest.trades.filter(t=>selected==='ALL'||t.symbol===selected);
+ const closed=trades.filter(t=>t.outcome!=='OPEN');
+ const wins=closed.filter(t=>t.outcome==='WIN').length;
+ const losses=closed.filter(t=>t.outcome==='LOSS').length;
+ const unpriced=closed.filter(t=>t.outcome==='UNPRICED').length;
+ const flat=closed.filter(t=>t.outcome==='BREAKEVEN').length;
+ const priced=wins+losses+flat;
+ put(el('closed'),closed.length);put(el('rate'),priced?(100*wins/priced).toFixed(1)+'%':'—');
+ put(el('record'),wins+' / '+losses);put(el('open'),trades.filter(t=>t.outcome==='OPEN').length);
+ put(el('wincount'),wins);put(el('losscount'),losses);put(el('unpriced'),unpriced);
+ el('winbar').style.width=(priced?100*wins/priced:0)+'%';
+ el('lossbar').style.width=(priced?100*losses/priced:0)+'%';
+ const markets=el('markets');markets.replaceChildren();
+ for(const name of [...new Set(trades.map(t=>t.symbol))].sort()){
+ const subset=trades.filter(t=>t.symbol===name);
+ const completed=subset.filter(t=>['WIN','LOSS','BREAKEVEN'].includes(t.outcome));
+ const w=completed.filter(t=>t.outcome==='WIN').length;
+ const line=document.createElement('div');line.className='market';
+ const left=document.createElement('strong');put(left,name);
+ const right=document.createElement('span');right.className='muted';put(right,completed.length?(100*w/completed.length).toFixed(1)+'% win rate · '+completed.length+' priced':'No priced closed trades');
+ line.append(left,right);markets.append(line);
+ }
+ if(!markets.children.length){const d=document.createElement('div');d.className='empty';put(d,'Waiting for signals…');markets.append(d)}
+ const body=el('trades');body.replaceChildren();el('empty').hidden=trades.length!==0;
+ for(const t of trades){
+ const row=document.createElement('tr');
+ const cells=[t.symbol,t.direction,dt(t.entry_time),fmt(t.entry_price),dt(t.exit_time),fmt(t.exit_price),fmt(t.points),t.outcome];
+ cells.forEach((value,i)=>{const cell=document.createElement('td');if(i===7){const badge=document.createElement('span');badge.className='pill '+(value==='WIN'?'win':value==='LOSS'?'loss':'open');put(badge,value);cell.append(badge)}else{put(cell,value);if(i===6&&t.points!=null)cell.className=Number(t.points)>0?'good':Number(t.points)<0?'bad':''}row.append(cell)});
+ body.append(row);
+ }
+ put(el('updated'),'Updated '+new Date().toLocaleTimeString());
+}
+async function refresh(){
+ try{
+ const response=await fetch('/journal/'+encodeURIComponent(secret),{cache:'no-store',credentials:'same-origin'});
+ if(!response.ok)throw Error('Journal request failed ('+response.status+')');
+ draw(await response.json());put(el('status'),'Connected.');
+ }catch(err){put(el('updated'),'Unable to refresh');put(el('status'),err.message);el('status').className='error'}
+}
+el('market').addEventListener('change',render);el('refresh').addEventListener('click',refresh);
+refresh();setInterval(()=>{if(!document.hidden)refresh()},30000);
+</script></body></html>
