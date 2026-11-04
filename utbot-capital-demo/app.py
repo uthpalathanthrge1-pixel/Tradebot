@@ -54,6 +54,24 @@ async def webhook(secret: str, request: Request):
             except sqlite3.IntegrityError:
                 return {'status':'duplicate','orders_submitted':False}
             disposition=record(conn,symbol,bar_time,direction,price)
+    # Connect the existing TradingView signal path to the DEMO bridge.
+    # Broker mutations remain blocked until GBP stop sizing, durable
+    # idempotency, close reconciliation and risk arming are verified.
+    if symbol in ('GOLD', 'XAUUSD'):
+        from demo_order_bridge import validate_signal, DemoOrderBridge
+        from risk_engine import RiskLedger, orders_permitted
+        signal = validate_signal({'epic':'GOLD','direction':direction,'size':'0.01'})
+        state = RiskLedger(DB).state()
+        if state['halted'] or not orders_permitted():
+            return {'status':'journaled','disposition':disposition,
+                    'execution':'connected_but_halted',
+                    'halt_reason':state['reason'],
+                    'orders_submitted':False}
+        # An independent broker execution review must change the gate;
+        # receiving an alert never constitutes permission to place orders.
+        outcome = DemoOrderBridge().submit(signal, gate_approved=False)
+        return {'status':'journaled','disposition':disposition,
+                'execution':outcome,'orders_submitted':False}
     return {'status':'journaled','disposition':disposition,'orders_submitted':False}
 
 @app.get('/status/{secret}')
