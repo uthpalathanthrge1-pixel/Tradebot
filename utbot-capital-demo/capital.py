@@ -10,7 +10,7 @@ class Capital:
     def __init__(self):
         self.http = requests.Session()
         self.tokens = {}
-        self.account_id = os.environ["CAPITAL_DEMO_ACCOUNT_ID"]
+        self.account_id = None
 
     def login(self):
         r = self.http.post(
@@ -28,13 +28,6 @@ class Capital:
             "CST": r.headers["CST"],
             "X-SECURITY-TOKEN": r.headers["X-SECURITY-TOKEN"],
         }
-        r = self.http.put(
-            BASE + "/session",
-            headers=self.tokens,
-            json={"accountId": self.account_id},
-            timeout=10,
-        )
-        r.raise_for_status()
 
     def get(self, path):
         if not self.tokens:
@@ -47,19 +40,28 @@ class Capital:
         return r.json()
 
     def account_check(self):
+        # Account discovery is read-only. Never guess if multiple GBP accounts exist.
         accounts = self.get("/accounts").get("accounts", [])
-        selected = next((a for a in accounts if str(a.get("accountId")) == self.account_id), None)
-        if selected is None:
-            raise ValueError("Configured demo account ID is not in the authenticated account list")
-        preferences = self.get("/accounts/preferences")
-        positions = self.get("/positions").get("positions", [])
+        gbp = [a for a in accounts if str(a.get("currency", "")).upper() == "GBP"]
+        if len(gbp) != 1:
+            return {
+                "configured_account_found": False,
+                "reason": "Expected exactly one GBP demo account; manual selection required",
+                "gbp_account_count": len(gbp),
+                "available_accounts": [
+                    {"currency": a.get("currency"), "account_name": a.get("accountName"),
+                     "account_type": a.get("accountType")} for a in accounts
+                ],
+                "no_orders_submitted": True,
+            }
+        selected = gbp[0]
+        # Do not return full account IDs in public/browser responses.
         return {
             "configured_account_found": True,
             "account_currency": selected.get("currency"),
             "account_type": selected.get("accountType"),
             "account_name": selected.get("accountName"),
-            "leverages": preferences.get("leverages"),
-            "hedging_mode": preferences.get("hedgingMode"),
-            "open_position_count": len(positions),
+            "account_id_detected": bool(selected.get("accountId")),
+            "available_accounts_count": len(accounts),
             "no_orders_submitted": True,
         }
