@@ -33,6 +33,8 @@ async def webhook(secret: str, request: Request):
         symbol = str(alert['symbol']).upper()
         direction = str(alert['direction']).upper()
         raw_time = alert['bar_time']
+        from signal_journal import parse_price
+        price = parse_price(alert.get('price'))
         if isinstance(raw_time, int) or (isinstance(raw_time, str) and raw_time.isdigit()):
             bar_time = int(raw_time)
         else:
@@ -41,13 +43,18 @@ async def webhook(secret: str, request: Request):
         raise HTTPException(400, 'Invalid alert')
     if direction not in ('BUY','SELL') or bar_time <= 0:
         raise HTTPException(400, 'Invalid signal')
+    if not symbol or len(symbol)>80:
+        raise HTTPException(400, 'Invalid symbol')
+    from signal_journal import record
     with lock:
         with db() as conn:
+            conn.execute('BEGIN IMMEDIATE')
             try:
                 conn.execute('INSERT INTO alerts VALUES (?,?,?)',(symbol,bar_time,direction))
             except sqlite3.IntegrityError:
-                return {'status':'duplicate'}
-    return {'status':'logged_only', 'reason':'broker execution disabled pending account and risk verification'}
+                return {'status':'duplicate','orders_submitted':False}
+            disposition=record(conn,symbol,bar_time,direction,price)
+    return {'status':'journaled','disposition':disposition,'orders_submitted':False}
 
 @app.get('/status/{secret}')
 def status(secret: str):
@@ -577,3 +584,12 @@ def gold_test_v2_execute(request: Request):
             'reason':gate.reason,
             'new_order_submitted':False,
             'main_bot_orders_enabled':False}
+
+@app.get('/journal/{secret}')
+def journal(secret: str):
+    """Authenticated paper journal of real TradingView alerts; no broker fills."""
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403,'Forbidden')
+    from signal_journal import report
+    with db() as conn:
+        return report(conn)
