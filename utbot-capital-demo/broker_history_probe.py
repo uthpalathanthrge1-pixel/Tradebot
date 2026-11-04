@@ -7,13 +7,13 @@ from datetime import date, timedelta
 from broker_history_validation import summarize_raw_history
 
 
-def probe_history(capital_client, *, today=None, lookback_days=7):
+def probe_history(capital_client, *, today=None, lookback_days=1):
     if not isinstance(lookback_days, int) or isinstance(lookback_days, bool) or not 1 <= lookback_days <= 30:
         raise ValueError('lookback_days must be 1..30')
     end = today or date.today()
     if not isinstance(end, date):
         raise ValueError('today must be a date')
-    start = end - timedelta(days=lookback_days)
+    # Keep the initial history window narrow to avoid broker range limits.\n    start = end - timedelta(days=lookback_days)
     # Uses existing read-only Capital.activity() adapter. Its query semantics
     # still need confirmation against the broker's API documentation.
     raw = capital_client.activity(start.isoformat(), end.isoformat())
