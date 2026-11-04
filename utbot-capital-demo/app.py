@@ -353,13 +353,18 @@ def one_off_gold_test(request: Request):
             record('buy_confirmed',reference,deal_id)
             if not deal_id:
                 return {'state':'buy_confirmed_missing_deal_id','manual_check_required':True}
-            # Verify the exact deal exists before issuing the close.
-            matches = [p for p in client.positions()
-                       if p.get('position',{}).get('dealId') == deal_id
-                       and p.get('market',{}).get('epic') == 'GOLD']
-            if len(matches) != 1:
+            # Capital.com may report an accepted deal before GET /positions
+            # reflects it. Poll, match by deal ID and verify the instrument,
+            # direction and size. Never guess or close an unrelated position.
+            from reconciliation import wait_for_position
+            matched, diagnostic = wait_for_position(
+                client.positions, deal_id, epic='GOLD', direction='BUY',
+                size='0.01', attempts=12, delay_seconds=2)
+            if matched is None:
                 record('position_reconciliation_failed')
-                return {'state':'position_reconciliation_failed','manual_check_required':True}
+                return {'state':'position_reconciliation_failed',
+                        'diagnostic':diagnostic,
+                        'manual_check_required':True}
             record('submitting_close')
             closed = client.close_position(deal_id)
             close_ref = closed.get('dealReference')
