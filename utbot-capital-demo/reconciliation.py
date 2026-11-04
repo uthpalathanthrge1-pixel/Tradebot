@@ -39,3 +39,31 @@ def wait_for_position(fetch_positions, deal_id, epic, direction, size,
             sleep(delay_seconds)
     return None, {'reason': 'no_exact_position_match_after_polling',
                   'polls': attempts}
+
+
+def opened_deal_ids(confirmation):
+    """Return unique OPENED position IDs; order reference is not position ID."""
+    deals = confirmation.get('affectedDeals') or []
+    ids = [str(d['dealId']) for d in deals
+           if d.get('status') == 'OPENED' and d.get('dealId')]
+    ids = list(dict.fromkeys(ids))
+    if ids:
+        return ids
+    # Some broker confirmations contain only the permanent dealId.
+    direct = confirmation.get('dealId')
+    return [str(direct)] if direct else []
+
+
+def wait_for_absence(fetch_positions, deal_id, attempts=12,
+                     delay_seconds=2, sleep=time.sleep):
+    """Poll until a previously verified position disappears."""
+    if not deal_id:
+        return False
+    for attempt in range(attempts):
+        positions = fetch_positions()
+        if not any(str((p.get('position') or {}).get('dealId')) == str(deal_id)
+                   for p in positions):
+            return True
+        if attempt + 1 < attempts:
+            sleep(delay_seconds)
+    return False
