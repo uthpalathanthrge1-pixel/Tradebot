@@ -20,6 +20,45 @@ def get_setting(key, default):
         r = conn.execute('SELECT value FROM settings WHERE key=?', (key,)).fetchone()
         return r[0] if r else default
 
+def order_control_state():
+    """Operator pause is independent of the immutable broker safety gate."""
+    return get_setting('operator_orders_paused', 'true') != 'false'
+
+@app.get('/order-control/{secret}')
+def order_control_status(secret: str):
+    import secrets as secure
+    expected = os.getenv('WEBHOOK_SECRET', '')
+    if not expected or not secure.compare_digest(secret, expected):
+        raise HTTPException(403, 'Forbidden')
+    paused = order_control_state()
+    return {'operator_paused': paused, 'operator_mode': 'PAUSED' if paused else 'RESUMED',
+            'orders_enabled': False, 'broker_execution_available': False,
+            'existing_positions_unchanged': True,
+            'queued_signals_replayed': False,
+            'note': 'Resume allows future signals only after separate execution safety approval.'}
+
+@app.post('/order-control/{secret}')
+async def order_control_update(secret: str, request: Request):
+    """Dashboard operator intent only; cannot arm risk engine or place orders."""
+    import secrets as secure
+    expected = os.getenv('WEBHOOK_SECRET', '')
+    if not expected or not secure.compare_digest(secret, expected):
+        raise HTTPException(403, 'Forbidden')
+    origin = request.headers.get('origin')
+    from urllib.parse import urlsplit
+    if not origin or urlsplit(origin).netloc != request.headers.get('host') or urlsplit(origin).scheme != request.url.scheme:
+        raise HTTPException(403, 'Same-origin request required')
+    if request.headers.get('content-type', '').split(';')[0].strip().lower() != 'application/json':
+        raise HTTPException(415, 'JSON required')
+    body = await request.json()
+    if not isinstance(body, dict) or body.get('action') not in ('pause', 'resume'):
+        raise HTTPException(400, 'Expected pause or resume')
+    paused = body['action'] == 'pause'
+    with db() as conn:
+        conn.execute('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+                     ('operator_orders_paused', 'true' if paused else 'false'))
+    return order_control_status(secret)
+
 @app.get('/health')
 def health():
     return {'status':'running', 'demo_only':True, 'orders_enabled':False, 'halted':True}
@@ -62,6 +101,9 @@ async def webhook(secret: str, request: Request):
         from risk_engine import RiskLedger, orders_permitted
         signal = validate_signal({'epic':'GOLD','direction':direction,'size':'0.01'})
         state = RiskLedger(DB).state()
+        if order_control_state():
+            return {'status':'journaled','disposition':disposition,
+                    'execution':'operator_paused','orders_submitted':False}
         if state['halted'] or not orders_permitted():
             return {'status':'journaled','disposition':disposition,
                     'execution':'connected_but_halted',
