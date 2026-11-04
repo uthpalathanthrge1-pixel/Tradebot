@@ -21,7 +21,7 @@ def probe_history(capital_client, *, today=None, lookback_days=1):
     summary = summarize_raw_history(raw)
     return {
         'mode': 'read_only_schema_probe',
-        'requested_window': 'last_3600_seconds',
+        'requested_window': 'last_604800_seconds',
         **summary,
         'orders_submitted': False,
         'journal_updated': False,
