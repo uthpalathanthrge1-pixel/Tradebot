@@ -141,8 +141,10 @@ class Capital:
                 return value + ("T23:59:59" if end else "T00:00:00")
             datetime.fromisoformat(value)
             return value
-        params = {"from": broker_datetime(from_date),
-                  "to": broker_datetime(to_date, end=True)}
+        # The read-only schema probe needs recent records, not a fixed date
+        # interval. Capital.com documents lastPeriod (seconds) as an
+        # alternative to from/to. Avoid invalid date-range boundaries.
+        params = {"lastPeriod": 3600}
         headers = {**self.tokens, "X-CAP-API-KEY": os.environ["CAPITAL_API_KEY"]}
         for attempt in range(2):
             try:
