@@ -677,3 +677,44 @@ def broker_diagnostics(secret: str):
                 'orders_submitted':False}
     except Exception:
         return {'ready':False,'stage':'broker_diagnostics_failed','orders_submitted':False}
+
+
+@app.get('/broker-journal/{secret}')
+def broker_journal_view(secret: str):
+    """Verified broker journal only. Does not contain TradingView paper fills."""
+    import secrets as secure
+    expected=os.environ.get('WEBHOOK_SECRET','')
+    if not expected or not secure.compare_digest(secret,expected):
+        raise HTTPException(403,'Forbidden')
+    from broker_journal import report
+    with db() as conn:
+        result=report(conn)
+    # Avoid exposing full deal identifiers in browser responses.
+    for trade in result['trades']:
+        trade['deal_id']='redacted'
+    return result
+
+@app.get('/demo-risk-monitor/{secret}')
+def demo_risk_monitor_view(secret: str):
+    """Read-only diagnostic, intentionally fail closed. No orders or closes."""
+    import secrets as secure
+    expected=os.environ.get('WEBHOOK_SECRET','')
+    if not expected or not secure.compare_digest(secret,expected):
+        raise HTTPException(403,'Forbidden')
+    from capital import Capital, CapitalCheckError
+    from demo_risk_monitor import inspect
+    from risk_engine import RiskLedger
+    state=RiskLedger(DB).state()
+    try:
+        positions=Capital().positions()
+        result=inspect(positions,realised_gbp=state['realised_gbp'])
+        result['persistent_halt']=state['halted']
+        result['halt_reason']=state['reason']
+        return result
+    except CapitalCheckError as exc:
+        return {'ready_to_trade':False,'must_halt':True,
+                'reason':'broker_read_failed','stage':exc.stage,
+                'http_status':exc.status,'orders_submitted':False}
+    except Exception:
+        return {'ready_to_trade':False,'must_halt':True,
+                'reason':'risk_inspection_failed','orders_submitted':False}
