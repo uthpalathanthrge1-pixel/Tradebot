@@ -119,3 +119,9 @@ class Capital:
     def close_position(self, deal_id):
         from urllib.parse import quote
         return self.request("DELETE", "/positions/" + quote(deal_id, safe=""))
+
+    def activity(self, from_date, to_date):
+        """Read-only transaction activity, dates in broker-supported ISO format."""
+        return self.request("GET", "/history/transactions",
+                            params={"from": from_date, "to": to_date,
+                                    "pageSize": 30, "pageNumber": 1})
