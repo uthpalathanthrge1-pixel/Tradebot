@@ -23,4 +23,4 @@ jobs:
         run: python -m pip install requests
       - name: Run offline close-sequence regression tests
         working-directory: utbot-capital-demo
-        run: python -m unittest -v test_close_sequence_offline test_capital_close_contract_offline test_gold_v2_preparation_offline
+        run: python -m unittest -v test_close_sequence_offline test_capital_close_contract_offline test_gold_v2_preparation_offline test_signal_reversal_offline
