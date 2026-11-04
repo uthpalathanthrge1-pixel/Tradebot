@@ -50,7 +50,7 @@ def calculate_stop_distance(signal, *, verified_gbp_per_point_per_unit,
     if distance<minimum:
         raise ValueError('minimum_stop_exceeds_50_gbp_risk')
     return {'stop_distance':format(distance,'f'),
-            'planned_loss_gbp':format(distance*point_value*size,'f'),
+            'planned_loss_gbp':format(distance*point_value*size,'.2f'),
             'max_planned_loss_gbp':'50', 'take_profit':None}
 
 def plan_signal(signal, positions):
