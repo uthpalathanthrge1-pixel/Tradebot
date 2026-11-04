@@ -752,3 +752,35 @@ def broker_history_probe_view(secret: str):
         return {'ready':False,'stage':'broker_history_probe_failed',
                 'error_category':category,'error_type':type(exc).__name__,
                 'orders_submitted':False,'journal_updated':False}
+
+
+@app.post('/gold-v2-prepare')
+async def gold_v2_prepare(request: Request):
+    """One-time proposal reservation only. Never sends broker orders."""
+    import secrets as secure
+    from gold_v2_preparation import prepare_once, status
+    expected=os.environ.get('DEMO_TEST_KEY','')
+    supplied=request.headers.get('X-DEMO-TEST-KEY','')
+    if not expected or len(expected)<24 or not secure.compare_digest(expected,supplied):
+        raise HTTPException(403,'Test authorisation required')
+    body=await request.json()
+    if not isinstance(body,dict) or body.get('approval')!='PREPARE_ONLY_NO_ORDERS':
+        raise HTTPException(400,'Explicit preparation-only approval required')
+    proposal_id=body.get('proposal_id')
+    if not isinstance(proposal_id,str):
+        raise HTTPException(400,'Invalid proposal ID')
+    result=prepare_once(DB,authenticated=True,proposal_id=proposal_id,
+                        explicit_preparation_approval=True)
+    return {'preparation_accepted':result.reason=='prepared_no_execution_adapter',
+            'execution_permitted':False,'reason':result.reason,
+            **status(DB)}
+
+@app.get('/gold-v2-preparation-status/{secret}')
+def gold_v2_preparation_status(secret: str):
+    """Read-only inspection of isolated preparation record."""
+    import secrets as secure
+    expected=os.environ.get('WEBHOOK_SECRET','')
+    if not expected or not secure.compare_digest(expected,secret):
+        raise HTTPException(403,'Forbidden')
+    from gold_v2_preparation import status
+    return status(DB)
