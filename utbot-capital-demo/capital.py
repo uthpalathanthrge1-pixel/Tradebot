@@ -121,7 +121,35 @@ class Capital:
         return self.request("DELETE", "/positions/" + quote(deal_id, safe=""))
 
     def activity(self, from_date, to_date):
-        """Read-only transaction activity, dates in broker-supported ISO format."""
-        return self.request("GET", "/history/transactions",
-                            params={"from": from_date, "to": to_date,
-                                    "pageSize": 30, "pageNumber": 1})
+        """Read-only history lookup with bounded timeout retry.
+
+        This path is GET-only. Never retry POST/DELETE order operations.
+        """
+        import time
+        if not self.tokens:
+            self.login()
+        params = {"from": from_date, "to": to_date,
+                  "pageSize": 10, "pageNumber": 1}
+        headers = {**self.tokens, "X-CAP-API-KEY": os.environ["CAPITAL_API_KEY"]}
+        for attempt in range(2):
+            try:
+                response = self.http.get(BASE + "/history/transactions",
+                                         headers=headers, params=params,
+                                         timeout=(5, 30))
+            except requests.exceptions.Timeout:
+                if attempt == 0:
+                    time.sleep(1)
+                    continue
+                raise
+            if response.status_code in (401, 403) and attempt == 0:
+                self.login()
+                headers = {**self.tokens,
+                           "X-CAP-API-KEY": os.environ["CAPITAL_API_KEY"]}
+                continue
+            if not response.ok:
+                raise CapitalCheckError("history_transactions", response.status_code)
+            try:
+                return response.json()
+            except ValueError:
+                raise CapitalCheckError("history_invalid_response", response.status_code)
+        raise CapitalCheckError("history_unavailable")
