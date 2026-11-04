@@ -437,3 +437,29 @@ def gold_test_reconcile(secret: str):
         return {'ready':False,'stage':exc.stage,'http_status':exc.status,'orders_enabled':False}
     except Exception:
         return {'ready':False,'stage':'reconciliation_read_failed','orders_enabled':False}
+
+@app.get('/gold-test-followup/{secret}')
+def gold_test_followup(secret: str):
+    """Read-only gate for a subsequent test; never resets a consumed test lock."""
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    from capital import Capital, CapitalCheckError
+    try:
+        with db() as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS one_off_tests (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL, deal_ref TEXT, deal_id TEXT)')
+            row = conn.execute('SELECT state FROM one_off_tests WHERE id=1').fetchone()
+        client = Capital()
+        account = client.account_check()
+        positions = client.positions()
+        return {'ready_for_new_order':False,
+                'account_verified': bool(account.get('configured_account_found') and account.get('account_type') == 'CFD'),
+                'open_position_count':len(positions),
+                'previous_test_state':row[0] if row else 'not_started',
+                'previous_test_lock_preserved':bool(row),
+                'close_api_verified':False,
+                'main_bot_orders_enabled':False,
+                'next_step':'Review broker close request semantics and separately authorise a fresh isolated test.'}
+    except CapitalCheckError as exc:
+        return {'ready_for_new_order':False,'stage':exc.stage,'http_status':exc.status}
+    except Exception:
+        return {'ready_for_new_order':False,'stage':'followup_read_failed'}
