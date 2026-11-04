@@ -128,8 +128,20 @@ class Capital:
         import time
         if not self.tokens:
             self.login()
-        params = {"from": from_date, "to": to_date,
-                  "pageSize": 10, "pageNumber": 1}
+        # Official Capital.com API requires full ISO date-time strings.
+        # Pagination parameters are not documented for this endpoint.
+        from datetime import date, datetime
+        def broker_datetime(value, end=False):
+            if isinstance(value, date) and not isinstance(value, datetime):
+                return value.isoformat() + ("T23:59:59" if end else "T00:00:00")
+            value = str(value)
+            if len(value) == 10:
+                date.fromisoformat(value)
+                return value + ("T23:59:59" if end else "T00:00:00")
+            datetime.fromisoformat(value)
+            return value
+        params = {"from": broker_datetime(from_date),
+                  "to": broker_datetime(to_date, end=True)}
         headers = {**self.tokens, "X-CAP-API-KEY": os.environ["CAPITAL_API_KEY"]}
         for attempt in range(2):
             try:
