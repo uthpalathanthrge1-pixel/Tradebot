@@ -65,9 +65,16 @@ def capital_check(secret: str):
     missing = [name for name in required if not os.environ.get(name)]
     if missing:
         return {'ready': False, 'missing_variables': missing, 'orders_enabled': False}
-    from capital import Capital
+    from capital import Capital, CapitalCheckError
+    import requests
     try:
         info = Capital().account_check()
         return {'ready': True, 'account': info, 'orders_enabled': False}
+    except CapitalCheckError as exc:
+        return {'ready': False, 'stage': exc.stage, 'http_status': exc.status, 'orders_enabled': False}
+    except requests.exceptions.Timeout:
+        return {'ready': False, 'stage': 'network_timeout', 'orders_enabled': False}
+    except requests.exceptions.RequestException:
+        return {'ready': False, 'stage': 'network_request_failed', 'orders_enabled': False}
     except Exception:
-        return {'ready': False, 'error': 'Capital.com demo authentication or account verification failed; check Render logs', 'orders_enabled': False}
+        return {'ready': False, 'stage': 'unexpected_error', 'orders_enabled': False}
