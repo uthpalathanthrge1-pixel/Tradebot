@@ -1,17 +1,18 @@
 """Capital.com DEMO-only signal-reversal planning, with execution disabled.
 
-No SL/TP is attached. An opposite signal means close the exact verified
+A GBP 50 planned-loss stop is mandatory for future orders; no TP.\nAn opposite signal means close the exact verified
 position first; a new position must never open before confirmed closure.
 No broker POST or DELETE is performed by this module.
 """
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_FLOOR
 
 @dataclass(frozen=True)
 class Signal:
     epic: str
     direction: str
     size: str
+    max_planned_loss_gbp: str = '50'
 
 def validate_signal(payload):
     if not isinstance(payload, dict):
@@ -25,6 +26,32 @@ def validate_signal(payload):
     if not size.is_finite() or size != Decimal('0.01'):
         raise ValueError('invalid_size')
     return Signal('GOLD',payload['direction'],'0.01')
+
+def calculate_stop_distance(signal, *, verified_gbp_per_point_per_unit,
+                            broker_min_stop_distance, broker_distance_increment):
+    """Fail closed unless broker-verified point value supports a <= GBP50 stop.
+
+    Returns a positive stopDistance for a broker-protected order. The caller
+    must validate broker-specific stop rules and attach it atomically to OPEN.
+    Stop orders do not guarantee a GBP50 realised loss during gaps/slippage.
+    """
+    try:
+        point_value=Decimal(str(verified_gbp_per_point_per_unit))
+        minimum=Decimal(str(broker_min_stop_distance))
+        increment=Decimal(str(broker_distance_increment))
+        risk=Decimal(signal.max_planned_loss_gbp)
+        size=Decimal(signal.size)
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError('unverified_stop_inputs')
+    if not all(x.is_finite() and x>0 for x in (point_value,minimum,increment,risk,size)):
+        raise ValueError('unverified_stop_inputs')
+    raw=risk/(point_value*size)
+    distance=(raw/increment).to_integral_value(rounding=ROUND_FLOOR)*increment
+    if distance<minimum:
+        raise ValueError('minimum_stop_exceeds_50_gbp_risk')
+    return {'stop_distance':str(distance),
+            'planned_loss_gbp':str(distance*point_value*size),
+            'max_planned_loss_gbp':'50', 'take_profit':None}
 
 def plan_signal(signal, positions):
     """Pure decision function. Never treats an ambiguous broker state as flat."""
