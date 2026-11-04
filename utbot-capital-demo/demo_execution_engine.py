@@ -46,6 +46,9 @@ def execute_signal(client, signal, *, verified_gbp_per_point_per_unit=None,
             and account.get('account_currency')=='GBP'
             and account.get('account_type')=='CFD'):
         return {'status':'blocked','reason':'account_not_verified'}
+    active=client.active_account_check()
+    if not active.get('active_account_verified'):
+        return {'status':'blocked','reason':'active_session_account_not_verified'}
     stop=calculate_stop_distance(signal,
         verified_gbp_per_point_per_unit=verified_gbp_per_point_per_unit,
         broker_min_stop_distance=broker_min_stop_distance,
