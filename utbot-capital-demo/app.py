@@ -227,3 +227,55 @@ def risk_readiness(secret: str):
         'continuous_risk_monitor_running': False,
         'note': 'Fail-closed risk module installed but not connected to order execution.'
     }
+
+@app.get('/gold-test-preview/{secret}')
+def gold_test_preview(secret: str):
+    """Read-only preflight for a controlled minimum-size Gold demo test.
+    Does NOT send orders; a separate explicit confirmation is required.
+    """
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    from capital import Capital, CapitalCheckError
+    from decimal import Decimal
+    try:
+        client = Capital()
+        account = client.account_check()
+        if not account.get('configured_account_found') or account.get('account_type') != 'CFD':
+            return {'ready': False, 'reason': 'GBP_CFD_DEMO_ACCOUNT_NOT_VERIFIED',
+                    'orders_enabled': False}
+        positions = client.positions()
+        if positions:
+            return {'ready': False, 'reason': 'EXISTING_POSITIONS_PRESENT',
+                    'open_position_count': len(positions), 'orders_enabled': False}
+        detail = client.market_details('GOLD')
+        instrument = detail.get('instrument', {})
+        dealing = detail.get('dealingRules', {})
+        snapshot = detail.get('snapshot', {})
+        minimum = dealing.get('minDealSize', {}).get('value')
+        factor = instrument.get('marginFactor')
+        offer = snapshot.get('offer')
+        if (instrument.get('epic') != 'GOLD' or
+                instrument.get('type') != 'COMMODITIES' or
+                snapshot.get('marketStatus') != 'TRADEABLE' or
+                minimum is None or factor is None or offer is None):
+            return {'ready': False, 'reason': 'GOLD_MARKET_DETAILS_INCOMPLETE',
+                    'orders_enabled': False}
+        return {
+            'ready': True, 'test_mode': 'PREVIEW_ONLY',
+            'instrument': 'GOLD', 'direction': 'BUY',
+            'minimum_deal_size': minimum,
+            'offer': offer, 'margin_factor_percent': factor,
+            'contract_size_verified': False,
+            'pnl_currency_verified': False,
+            'margin_estimate_verified': False,
+            'existing_positions': 0,
+            'main_bot_halted': True,
+            'orders_enabled': False,
+            'next_step': 'Review preview and explicitly approve a one-off demo test.'
+        }
+    except CapitalCheckError as exc:
+        return {'ready': False, 'stage': exc.stage,
+                'http_status': exc.status, 'orders_enabled': False}
+    except Exception:
+        return {'ready': False, 'stage': 'gold_test_preflight_failed',
+                'orders_enabled': False}
