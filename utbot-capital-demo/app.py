@@ -344,12 +344,16 @@ def one_off_gold_test(request: Request):
             if not confirmation or confirmation.get('dealStatus') != 'ACCEPTED':
                 record('buy_unconfirmed')
                 return {'state':'buy_unconfirmed','manual_check_required':True}
-            deal_id = confirmation.get('dealId')
-            if not deal_id:
-                for item in confirmation.get('affectedDeals',[]):
-                    if item.get('status') == 'OPENED':
-                        deal_id = item.get('dealId')
-                        break
+            from reconciliation import opened_deal_ids
+            opened_ids = opened_deal_ids(confirmation)
+            # Never guess which position to close if a single test order
+            # opened multiple positions.
+            if len(opened_ids) != 1:
+                record('ambiguous_opened_deals')
+                return {'state':'ambiguous_opened_deals',
+                        'opened_deal_count':len(opened_ids),
+                        'manual_check_required':True}
+            deal_id = opened_ids[0]
             record('buy_confirmed',reference,deal_id)
             if not deal_id:
                 return {'state':'buy_confirmed_missing_deal_id','manual_check_required':True}
@@ -380,10 +384,14 @@ def one_off_gold_test(request: Request):
                     if exc.status != 404:
                         raise
                     time.sleep(1)
-            still_open = any(p.get('position',{}).get('dealId') == deal_id for p in client.positions())
-            if still_open or not close_confirmation or close_confirmation.get('dealStatus') != 'ACCEPTED':
+            from reconciliation import wait_for_absence
+            if not close_confirmation or close_confirmation.get('dealStatus') != 'ACCEPTED':
                 record('close_unconfirmed')
                 return {'state':'close_unconfirmed','manual_check_required':True}
+            if not wait_for_absence(client.positions, deal_id,
+                                    attempts=12, delay_seconds=2):
+                record('close_still_visible')
+                return {'state':'close_still_visible','manual_check_required':True}
             record('closed_confirmed')
             return {'state':'closed_confirmed','gold_size':0.01,'main_bot_orders_enabled':False}
         except Exception:
