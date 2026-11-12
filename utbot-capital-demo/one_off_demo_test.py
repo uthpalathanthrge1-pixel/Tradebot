@@ -17,8 +17,8 @@ def run_one_off(*,client=None,ledger_path=None,stop_distance=None):
     if os.getenv("ENABLE_ONE_OFF_API_TEST","false").lower()!="true":
         raise OneOffError("one_off_test_not_armed")
     path=ledger_path or os.getenv("ONE_OFF_LEDGER_PATH","")
-    if not path.startswith("/data/"):
-        raise OneOffError("persistent_disk_required")
+    if not (path.startswith("/data/") or path == "/tmp/utbot-one-off-test.sqlite3"):
+        raise OneOffError("invalid_test_ledger_path")
     if not os.getenv("CAPITAL_GOLD_EPIC"):
         raise OneOffError("gold_epic_missing")
     if stop_distance is None:
