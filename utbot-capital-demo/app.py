@@ -99,6 +99,9 @@ def broker_dashboard(request: Request):
             state['account'] = 'GBP CFD DEMO verified' if account.get('active_account_verified') else 'Account unverified'
             if not account.get('active_account_verified'):
                 state['connection'] = 'Connected; account unverified'
+                state['account_reason'] = account.get('reason', 'verification_incomplete')
+                if 'gbp_cfd_account_count' in account:
+                    state['account_count'] = account['gbp_cfd_account_count']
             else:
                 state['connection'] = 'Connected to demo API'
                 for label, definition in MARKETS.items():
