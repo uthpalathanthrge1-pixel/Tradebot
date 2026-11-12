@@ -46,5 +46,31 @@ class TestMarketValidation(unittest.TestCase):
         self.assertFalse(result["orders_enabled"])
 
 
+class TestBrokerReconciliation(unittest.TestCase):
+    def test_open_requires_exact_matching_position(self):
+        from demo_order_bridge import verify_open_confirmation
+        confirm = {"dealStatus": "ACCEPTED", "dealId": "demo-deal"}
+        positions = [{"position": {"dealId": "demo-deal", "direction": "BUY", "size": 0.01},
+                      "market": {"epic": "GOLD"}}]
+        self.assertTrue(verify_open_confirmation(confirm, positions, epic="GOLD",
+                                                direction="BUY", size="0.01")["verified"])
+        self.assertFalse(verify_open_confirmation(confirm, [], epic="GOLD",
+                                                 direction="BUY", size="0.01")["verified"])
+
+    def test_close_requires_absent_position(self):
+        from demo_order_bridge import verify_close_confirmation
+        confirm = {"dealStatus": "ACCEPTED", "dealId": "demo-deal"}
+        positions = [{"position": {"dealId": "demo-deal"}}]
+        self.assertFalse(verify_close_confirmation(confirm, positions, deal_id="demo-deal")["verified"])
+        self.assertTrue(verify_close_confirmation(confirm, [], deal_id="demo-deal")["verified"])
+
+    def test_rejects_unaccepted_confirmations(self):
+        from demo_order_bridge import verify_open_confirmation, verify_close_confirmation
+        self.assertFalse(verify_open_confirmation({"dealStatus": "REJECTED", "dealId": "x"},
+                          [], epic="GOLD", direction="BUY", size="0.01")["verified"])
+        self.assertFalse(verify_close_confirmation({"dealStatus": "REJECTED", "dealId": "x"},
+                          [], deal_id="x")["verified"])
+
+
 if __name__ == "__main__":
     unittest.main()
