@@ -18,6 +18,7 @@ class Capital:
         self.http = requests.Session()
         self.tokens = {}
         self.account_id = None
+        self.session_account_id = None
 
     def login(self):
         r = self.http.post(
@@ -34,6 +35,11 @@ class Capital:
             raise CapitalCheckError("session_login", r.status_code)
         if not r.headers.get("CST") or not r.headers.get("X-SECURITY-TOKEN"):
             raise CapitalCheckError("session_tokens_missing", r.status_code)
+        try:
+            session_body = r.json()
+        except ValueError:
+            session_body = {}
+        self.session_account_id = session_body.get("currentAccountId") if isinstance(session_body, dict) else None
         self.tokens = {
             "CST": r.headers["CST"],
             "X-SECURITY-TOKEN": r.headers["X-SECURITY-TOKEN"],
@@ -94,7 +100,7 @@ class Capital:
                     "reason": "unique_gbp_cfd_account_not_identified",
                     "gbp_cfd_account_count": len(gbp)}
         session = self.get("/session")
-        active_id = session.get("currentAccountId")
+        active_id = session.get("currentAccountId") or self.session_account_id
         if not active_id or str(active_id) != str(gbp[0]["accountId"]):
             return {"active_account_verified": False,
                     "reason": "session_active_account_missing" if not active_id else "active_session_account_mismatch"}
