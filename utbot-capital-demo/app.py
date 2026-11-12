@@ -4,6 +4,12 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Request
 
 app = FastAPI(title='UT Bot Capital Demo')
+
+@app.get('/', include_in_schema=False)
+def homepage():
+    from dashboard import dashboard
+    return dashboard()
+
 lock = threading.RLock()
 DB = os.getenv('DB_PATH', '/data/utbot.sqlite3')
 os.makedirs(os.path.dirname(DB) or '.', exist_ok=True)
