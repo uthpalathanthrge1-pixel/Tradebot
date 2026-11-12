@@ -41,7 +41,7 @@ def margin_preview(*, price, margin_factor_percent, units_per_size,
                 "orders_enabled": False}
     margin = size * per_size
     return {"ready": False, "reason": "read_only_estimate_requires_broker_validation",
-            "size_preview": str(size), "estimated_margin_gbp": str(margin),
+            "size_preview": format(size, "f"), "estimated_margin_gbp": format(margin, "f"),
             "target_margin_gbp": str(budget), "orders_enabled": False}
 
 
