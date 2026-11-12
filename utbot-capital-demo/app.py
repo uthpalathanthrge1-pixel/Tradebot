@@ -188,25 +188,24 @@ async def webhook(secret: str, request: Request):
     # Connect the existing TradingView signal path to the DEMO bridge.
     # Broker mutations remain blocked until GBP stop sizing, durable
     # idempotency, close reconciliation and risk arming are verified.
-    if symbol in ('GOLD', 'XAUUSD'):
-        from demo_order_bridge import validate_signal, DemoOrderBridge
-        from risk_engine import RiskLedger, orders_permitted
-        signal = validate_signal({'epic':'GOLD','direction':direction,'size':'0.01'})
-        state = RiskLedger(DB).state()
-        if order_control_state():
-            return {'status':'journaled','disposition':disposition,
-                    'execution':'operator_paused','orders_submitted':False}
-        if state['halted'] or not orders_permitted():
-            return {'status':'journaled','disposition':disposition,
-                    'execution':'connected_but_halted',
-                    'halt_reason':state['reason'],
-                    'orders_submitted':False}
-        # An independent broker execution review must change the gate;
-        # receiving an alert never constitutes permission to place orders.
-        outcome = DemoOrderBridge().submit(signal, gate_approved=False)
-        return {'status':'journaled','disposition':disposition,
-                'execution':outcome,'orders_submitted':False}
-    return {'status':'journaled','disposition':disposition,'orders_submitted':False}
+    # Signal reception never executes orders. All three markets use the same
+    # fail-closed path; never manufacture a GOLD order for another symbol.
+    from risk_engine import RiskLedger, orders_permitted
+    aliases = {'GOLD': 'GOLD', 'XAUUSD': 'GOLD',
+               'OIL': 'OIL', 'OIL_CRUDE': 'OIL', 'US500': 'US500'}
+    market = aliases.get(symbol)
+    if not market:
+        return {'status': 'journaled', 'disposition': disposition,
+                'execution': 'unsupported_market', 'orders_submitted': False}
+    if order_control_state():
+        return {'status': 'journaled', 'disposition': disposition,
+                'market': market, 'execution': 'operator_paused',
+                'orders_submitted': False}
+    state = RiskLedger(DB).state()
+    return {'status': 'journaled', 'disposition': disposition,
+            'market': market, 'execution': 'connected_but_halted',
+            'halt_reason': state['reason'] if state['halted'] else 'broker_execution_not_validated',
+            'orders_submitted': False}
 
 @app.get('/status/{secret}')
 def status(secret: str):
