@@ -40,6 +40,8 @@ def dashboard(state=None):
                      + '<div class="kv"><span>Maximum trade size</span><strong>' + broker_rule(detail.get("max_deal_size")) + '</strong></div>'
                      + '<div class="kv"><span>Size increment</span><strong>' + broker_rule(detail.get("size_increment")) + '</strong></div>'
                      + '<div class="kv"><span>Target margin</span><strong>£1,500</strong></div>'
+                     + '<div class="kv"><span>Instrument type</span><strong>' + safe(detail.get("instrument_type")) + '</strong></div>'
+                     + '<div class="kv"><span>Broker currencies</span><strong>' + safe(detail.get("currencies")) + '</strong></div>'
                      + '<div class="kv"><span>GBP conversion</span><strong>Not verified</strong></div>'
                      + '<div class="kv"><span>Estimated GBP margin</span><strong>Blocked — missing broker inputs</strong></div>'
                      + '<div class="kv"><span>Proposed order size</span><strong>Blocked — not safe to calculate</strong></div>')
@@ -59,6 +61,8 @@ def dashboard(state=None):
         "active_session_account_mismatch": "Active session account differs from GBP CFD demo account",
         "verification_incomplete": "Account verification incomplete",
     }
+    if broker_state.get("preferences_status"):
+        page = page.replace("Broker market data shown only on this protected view.", "Read-only account preferences: " + safe(broker_state["preferences_status"]) + ". Broker market data shown only on this protected view.")
     reason = broker_state.get("account_reason")
     if reason:
         detail = reasons.get(reason, "Account verification incomplete")
