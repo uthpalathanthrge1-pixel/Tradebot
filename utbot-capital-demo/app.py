@@ -1063,3 +1063,69 @@ def gold_preflight_report(request: Request):
         result={'ready':False,'reason':'broker_preflight_failed'}
     result['orders_submitted']=False
     return JSONResponse(result,headers={'Cache-Control':'no-store','X-Robots-Tag':'noindex'})
+
+# Explicit dashboard-click-only test. Does not connect to TradingView webhooks.
+_one_off_click_lock=threading.Lock()
+_one_off_clicked=False
+
+@app.get('/operator/demo-test',include_in_schema=False)
+def one_off_test_page(request:Request):
+    import base64,hmac
+    from fastapi.responses import HTMLResponse
+    auth=request.headers.get('authorization','')
+    valid=False
+    if auth.startswith('Basic ') and os.getenv('DASHBOARD_PASSWORD'):
+        try:
+            username,password=base64.b64decode(auth[6:],validate=True).decode().split(':',1)
+            valid=hmac.compare_digest(username,'dashboard') and hmac.compare_digest(password,os.environ['DASHBOARD_PASSWORD'])
+        except (ValueError,UnicodeDecodeError):
+            pass
+    if not valid:
+        return HTMLResponse('Authentication required',status_code=401,headers={'WWW-Authenticate':'Basic realm="UT Bot Demo Dashboard"'})
+    page="""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>One-off DEMO Gold test</title></head><body style="font:16px system-ui;max-width:650px;margin:50px auto;padding:16px"><h2>Capital.com DEMO — Gold 0.01</h2><p>One click attempts a single BUY, confirms it, then attempts to close it. DEMO virtual funds only. If a broker step fails, check open positions manually. No automatic retry.</p><button id="go" style="padding:14px 22px;cursor:pointer">Run one-off DEMO test</button><pre id="result" style="white-space:pre-wrap"></pre><script>document.getElementById('go').onclick=async()=>{const b=document.getElementById('go');b.disabled=true;document.getElementById('result').textContent='Submitting test request...';try{const r=await fetch('/operator/demo-test/run',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:'ONE_OFF_GOLD_DEMO_001'})});document.getElementById('result').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.getElementById('result').textContent='Request outcome uncertain. Check DEMO positions manually; do not retry.'}}</script></body></html>"""
+    return HTMLResponse(page,headers={'Cache-Control':'no-store','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'"})
+
+@app.post('/operator/demo-test/run',include_in_schema=False)
+def one_off_test_click(request:Request):
+    import base64,hmac
+    auth=request.headers.get('authorization','')
+    valid=False
+    if auth.startswith('Basic ') and os.getenv('DASHBOARD_PASSWORD'):
+        try:
+            username,password=base64.b64decode(auth[6:],validate=True).decode().split(':',1)
+            valid=hmac.compare_digest(username,'dashboard') and hmac.compare_digest(password,os.environ['DASHBOARD_PASSWORD'])
+        except (ValueError,UnicodeDecodeError):
+            pass
+    if not valid:
+        raise HTTPException(403,'Forbidden')
+    # Same-origin browser request; do not accept cross-site POSTs.
+    origin=request.headers.get('origin')
+    if origin and origin.rstrip('/')!=str(request.base_url).rstrip('/'):
+        raise HTTPException(403,'Origin mismatch')
+    global _one_off_clicked
+    with _one_off_click_lock:
+        if _one_off_clicked:
+            return {'test':'blocked','reason':'already_attempted_this_process_check_broker'}
+        _one_off_clicked=True
+    from capital import Capital
+    from one_off_demo_test import run_one_off,OneOffError
+    try:
+        broker=Capital()
+        account=broker.active_account_check()
+        if not account.get('active_account_verified'):
+            return {'test':'blocked','reason':'demo_account_unverified'}
+        epic=os.getenv('CAPITAL_GOLD_EPIC','')
+        details=broker.market_details(epic)
+        rule=(details.get('dealingRules') or {}).get('minNormalStopOrLimitDistance') or {}
+        # Only point-denominated minimum distances are supported.
+        if not isinstance(rule,dict) or str(rule.get('unit','')).upper() not in ('POINTS','POINT'):
+            return {'test':'blocked','reason':'stop_distance_units_unverified','broker_rule':rule}
+        from decimal import Decimal
+        stop=Decimal(str(rule.get('value')))*Decimal('2')
+        if not stop.is_finite() or stop<=0:
+            return {'test':'blocked','reason':'invalid_broker_stop_distance'}
+        return run_one_off(client=broker,ledger_path='/tmp/utbot-one-off-test.sqlite3',stop_distance=stop)
+    except OneOffError as exc:
+        return {'test':'blocked','reason':str(exc)}
+    except Exception:
+        return {'test':'halted','reason':'broker_result_uncertain_check_demo_positions_manually'}
