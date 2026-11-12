@@ -69,7 +69,7 @@ def dashboard(state=None):
     event_rows = "".join("<tr>" + "".join("<td>" + safe(v) + "</td>" for v in row) + "</tr>"
                          for row in events if isinstance(row, (tuple, list)) and len(row) == 5)
     execution_journal = ('<section class="notice" style="margin-top:18px;overflow-x:auto">'
-                         '<h3>Automated execution audit</h3><p>Recorded broker execution events (not TradingView signals).</p>'
+                         '<h3>Automated execution audit · Latest 30</h3><p>Recent recorded execution events (not TradingView signals).</p>'
                          '<table style="width:100%;min-width:650px;text-align:left"><thead><tr>'
                          '<th>UTC time</th><th>Market</th><th>Event</th><th>Deal ID</th><th>Status</th>'
                          '</tr></thead><tbody>' + (event_rows or '<tr><td colspan="5">No automated execution events recorded</td></tr>') +
