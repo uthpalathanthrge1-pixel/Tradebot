@@ -935,3 +935,20 @@ def gold_v2_preparation_status(secret: str):
         raise HTTPException(403,'Forbidden')
     from gold_v2_preparation import status
     return status(DB)
+
+@app.get('/confirmation-diagnostic/{secret}')
+def confirmation_diagnostic(secret: str, deal_reference: str):
+    """Read-only DEMO confirmation schema probe. No order mutations."""
+    if not os.environ.get('WEBHOOK_SECRET') or secret != os.environ['WEBHOOK_SECRET']:
+        raise HTTPException(403, 'Forbidden')
+    from confirmation_diagnostic import inspect_confirmation
+    from capital import CapitalCheckError
+    import requests
+    try:
+        return {'ready': True, 'confirmation': inspect_confirmation(deal_reference),
+                'orders_submitted': False}
+    except ValueError as exc:
+        return {'ready': False, 'reason': str(exc), 'orders_submitted': False}
+    except (CapitalCheckError, requests.exceptions.RequestException):
+        return {'ready': False, 'reason': 'broker_confirmation_unavailable',
+                'orders_submitted': False}
