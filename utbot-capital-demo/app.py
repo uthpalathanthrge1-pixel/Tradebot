@@ -145,7 +145,7 @@ def broker_dashboard(request: Request):
         except (CapitalCheckError, ValueError, KeyError, __import__('requests').exceptions.RequestException):
             state['connection'] = 'Broker connection failed'
     with db() as conn:
-        state['execution_events'] = conn.execute('SELECT created_utc,market,event_type,deal_id,status FROM execution_events ORDER BY created_utc DESC LIMIT 100').fetchall()
+        state['execution_events'] = conn.execute('SELECT created_utc,market,event_type,deal_id,status FROM execution_events ORDER BY created_utc DESC LIMIT 30').fetchall()
     response = dashboard(state)
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Robots-Tag'] = 'noindex'
