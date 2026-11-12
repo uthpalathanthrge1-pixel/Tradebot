@@ -978,3 +978,40 @@ async def operator_one_off_demo_test(request: Request):
         # After an ambiguous broker result, never automatically retry.
         return {'test':'halted','reason':'broker_result_ambiguous_check_positions_manually',
                 'orders_enabled':False}
+
+@app.get('/operator/gold-test-preflight/{secret}', include_in_schema=False)
+def gold_test_preflight(secret: str):
+    """Read-only broker rules. No order execution, including on Free instances."""
+    import hmac
+    expected=os.getenv('WEBHOOK_SECRET','')
+    if not expected or not hmac.compare_digest(secret,expected):
+        raise HTTPException(403,'Forbidden')
+    from capital import Capital
+    from market_validation import inspect_market
+    try:
+        broker=Capital()
+        account=broker.active_account_check()
+        if not account.get('active_account_verified'):
+            return {'ready':False,'reason':'demo_account_not_verified','orders_submitted':False}
+        epic=os.getenv('CAPITAL_GOLD_EPIC','')
+        if not epic:
+            return {'ready':False,'reason':'gold_epic_not_configured','orders_submitted':False}
+        market=inspect_market(broker,epic)
+        details=broker.market_details(epic)
+        rules=details.get('dealingRules') or {}
+        stop=rules.get('minNormalStopOrLimitDistance')
+        # Broker min distance may be percentage or points; never assume units.
+        positions=broker.positions()
+        return {'ready':False,'account':'GBP_CFD_DEMO',
+                'market_status':market.get('market_status'),
+                'min_deal_size':market.get('min_deal_size'),
+                'size_increment':market.get('size_increment'),
+                'minimum_stop_rule':stop,
+                'stop_rule_unit_requires_verification':True,
+                'open_position_count':len(positions),
+                'existing_positions_block_test':bool(positions),
+                'persistent_ledger_available':False,
+                'reason':'free_service_has_no_persistent_execution_ledger',
+                'orders_submitted':False}
+    except Exception:
+        return {'ready':False,'reason':'broker_preflight_failed','orders_submitted':False}
