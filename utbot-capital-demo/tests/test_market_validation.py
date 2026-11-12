@@ -15,7 +15,7 @@ class TestMarketValidation(unittest.TestCase):
         result = margin_preview(price="100", margin_factor_percent="5",
             units_per_size="1", gbp_per_quote_unit="1",
             min_size="0.1", size_increment="0.1")
-        self.assertEqual(result["size_preview"], "300.0")
+        self.assertEqual(float(result["size_preview"]), 300.0)
         self.assertEqual(result["estimated_margin_gbp"], "1500.000")
         self.assertFalse(result["orders_enabled"])
         self.assertFalse(result["ready"])
