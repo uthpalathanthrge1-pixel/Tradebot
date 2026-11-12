@@ -65,6 +65,58 @@ async def order_control_update(secret: str, request: Request):
                      ('operator_orders_paused', 'true' if paused else 'false'))
     return order_control_status(secret)
 
+
+@app.get('/broker-dashboard', include_in_schema=False)
+def broker_dashboard(request: Request):
+    """Password-protected, GET-only demo broker dashboard."""
+    import base64, hmac
+    from fastapi.responses import HTMLResponse
+    from market_validation import MARKETS, inspect_market
+    from dashboard import dashboard
+    expected = os.getenv('DASHBOARD_PASSWORD', '')
+    auth = request.headers.get('authorization', '')
+    valid = False
+    if expected and auth.startswith('Basic '):
+        try:
+            raw = base64.b64decode(auth[6:], validate=True).decode('utf-8')
+            username, password = raw.split(':', 1)
+            valid = hmac.compare_digest(username, 'dashboard') and hmac.compare_digest(password, expected)
+        except (ValueError, UnicodeDecodeError):
+            pass
+    if not valid:
+        return HTMLResponse('Dashboard authentication required', status_code=401,
+                            headers={'WWW-Authenticate': 'Basic realm="UT Bot Demo Dashboard"',
+                                     'Cache-Control': 'no-store'})
+    required = ('CAPITAL_API_KEY', 'CAPITAL_IDENTIFIER', 'CAPITAL_API_PASSWORD')
+    missing = [k for k in required if not os.getenv(k)]
+    state = {'connection': 'Credentials missing' if missing else 'Not verified',
+             'markets': {}, 'account': 'Not verified'}
+    if not missing:
+        from capital import Capital, CapitalCheckError
+        try:
+            client = Capital()
+            account = client.active_account_check()
+            state['account'] = 'GBP CFD DEMO verified' if account.get('active_account_verified') else 'Account unverified'
+            if not account.get('active_account_verified'):
+                state['connection'] = 'Connected; account unverified'
+            else:
+                state['connection'] = 'Connected to demo API'
+                for label, definition in MARKETS.items():
+                    epic = os.getenv(definition['env'], '').strip()
+                    if not epic:
+                        state['markets'][label] = {'reason': 'EPIC not configured'}
+                        continue
+                    try:
+                        state['markets'][label] = inspect_market(client, epic)
+                    except (CapitalCheckError, ValueError):
+                        state['markets'][label] = {'reason': 'Broker market lookup failed'}
+        except (CapitalCheckError, ValueError, KeyError, __import__('requests').exceptions.RequestException):
+            state['connection'] = 'Broker connection failed'
+    response = dashboard(state)
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['X-Robots-Tag'] = 'noindex'
+    return response
+
 @app.get('/health')
 def health():
     return {'status':'running', 'demo_only':True, 'orders_enabled':False, 'halted':True}
