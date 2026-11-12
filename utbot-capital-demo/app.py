@@ -1104,11 +1104,6 @@ def one_off_test_click(request:Request):
         raise HTTPException(403,'Origin mismatch')
     if request.headers.get('content-type','').split(';')[0].strip().lower()!='application/json':
         raise HTTPException(415,'JSON required')
-    global _one_off_clicked
-    with _one_off_click_lock:
-        if _one_off_clicked:
-            return {'test':'blocked','reason':'already_attempted_this_process_check_broker'}
-        _one_off_clicked=True
     from capital import Capital
     from one_off_demo_test import run_one_off,OneOffError
     try:
@@ -1118,14 +1113,24 @@ def one_off_test_click(request:Request):
             return {'test':'blocked','reason':'demo_account_unverified'}
         epic=os.getenv('CAPITAL_GOLD_EPIC','')
         details=broker.market_details(epic)
-        rule=(details.get('dealingRules') or {}).get('minNormalStopOrLimitDistance') or {}
+        rules=details.get('dealingRules') or {}
+        rule=rules.get('minNormalStopOrLimitDistance') or rules.get('minStopOrLimitDistance') or {}
+        if not isinstance(rule,dict):
+            rule={'value':rule,'unit':'UNSPECIFIED'}
         # Only point-denominated minimum distances are supported.
         if not isinstance(rule,dict) or str(rule.get('unit','')).upper() not in ('POINTS','POINT'):
-            return {'test':'blocked','reason':'stop_distance_units_unverified','broker_rule':rule}
+            return {'test':'blocked','reason':'stop_distance_units_unverified','broker_rule':rule,
+                    'available_rule_fields':sorted(str(k) for k in rules.keys()),
+                    'no_order_submitted':True}
         from decimal import Decimal
         stop=Decimal(str(rule.get('value')))*Decimal('2')
         if not stop.is_finite() or stop<=0:
             return {'test':'blocked','reason':'invalid_broker_stop_distance'}
+        global _one_off_clicked
+        with _one_off_click_lock:
+            if _one_off_clicked:
+                return {'test':'blocked','reason':'already_attempted_this_process_check_broker'}
+            _one_off_clicked=True
         return run_one_off(client=broker,ledger_path='/tmp/utbot-one-off-test.sqlite3',stop_distance=stop)
     except OneOffError as exc:
         return {'test':'blocked','reason':str(exc)}
