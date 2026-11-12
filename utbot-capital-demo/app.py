@@ -1114,7 +1114,7 @@ def one_off_test_click(request:Request):
         epic=os.getenv('CAPITAL_GOLD_EPIC','')
         details=broker.market_details(epic)
         rules=details.get('dealingRules') or {}
-        rule=rules.get('minNormalStopOrLimitDistance') or rules.get('minStopOrLimitDistance') or {}
+        rule=rules.get('minNormalStopOrLimitDistance') or rules.get('minStopOrProfitDistance') or {}
         if not isinstance(rule,dict):
             rule={'value':rule,'unit':'UNSPECIFIED'}
         # Only point-denominated minimum distances are supported.
