@@ -156,7 +156,7 @@ class Capital:
             raise ValueError('invalid_stop_distance')
         return self.request("POST", "/positions", {
             "epic": epic, "direction": direction, "size": str(size),
-            "orderType": "MARKET", "guaranteedStop": False,
+            "guaranteedStop": False,
             "stopDistance": float(stop),
         })
 
