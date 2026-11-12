@@ -107,6 +107,7 @@ class TestReversalPlanning(unittest.TestCase):
                                     broker_min_stop_distance='1',
                                     broker_distance_increment='0.1')
 
+from test_execution_coordinator import TestCoordinator
 from test_webhook_safety import WebhookSafetyTests
 from test_broker_reconciliation import ReconciliationTests
 
