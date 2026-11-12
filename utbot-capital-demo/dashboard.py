@@ -63,6 +63,8 @@ def dashboard(state=None):
     }
     if broker_state.get("preferences_status"):
         page = page.replace("Broker market data shown only on this protected view.", "Read-only account preferences: " + safe(broker_state["preferences_status"]) + ". Broker market data shown only on this protected view.")
+    if broker_state.get("gold_test_preflight"):
+        page = page.replace("Broker market data shown only on this protected view.", "Gold 0.01 BUY test preflight: " + safe(broker_state["gold_test_preflight"]) + ". Broker market data shown only on this protected view.")
     reason = broker_state.get("account_reason")
     if reason:
         detail = reasons.get(reason, "Account verification incomplete")
