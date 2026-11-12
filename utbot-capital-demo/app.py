@@ -109,6 +109,23 @@ def broker_dashboard(request: Request):
                     state['preferences_status'] = 'Available' if isinstance(prefs, dict) else 'Unavailable'
                 except (CapitalCheckError, ValueError, KeyError, __import__('requests').exceptions.RequestException):
                     state['preferences_status'] = 'Unavailable'
+                try:
+                    existing = client.positions()
+                    gold_epic = os.getenv('CAPITAL_GOLD_EPIC', '').strip()
+                    if not isinstance(existing, list):
+                        state['gold_test_preflight'] = 'Blocked — broker positions response invalid'
+                    elif not gold_epic:
+                        state['gold_test_preflight'] = 'Blocked — Gold EPIC not configured'
+                    else:
+                        gold_positions = [p for p in existing
+                                          if isinstance(p, dict)
+                                          and isinstance(p.get('market'), dict)
+                                          and p['market'].get('epic') == gold_epic]
+                        state['gold_test_preflight'] = (
+                            'Blocked — existing Gold position(s): ' + str(len(gold_positions))
+                            if gold_positions else 'No Gold positions found — order execution still disabled')
+                except (CapitalCheckError, ValueError, KeyError, __import__('requests').exceptions.RequestException):
+                    state['gold_test_preflight'] = 'Blocked — unable to verify broker positions'
                 for label, definition in MARKETS.items():
                     epic = os.getenv(definition['env'], '').strip()
                     if not epic:
