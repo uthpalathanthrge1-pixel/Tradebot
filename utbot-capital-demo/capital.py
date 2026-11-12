@@ -91,12 +91,13 @@ class Capital:
                and str(a.get("accountType", "")).upper() == "CFD"]
         if len(gbp) != 1 or not gbp[0].get("accountId"):
             return {"active_account_verified": False,
-                    "reason": "unique_gbp_cfd_account_not_identified"}
+                    "reason": "unique_gbp_cfd_account_not_identified",
+                    "gbp_cfd_account_count": len(gbp)}
         session = self.get("/session")
         active_id = session.get("currentAccountId")
         if not active_id or str(active_id) != str(gbp[0]["accountId"]):
             return {"active_account_verified": False,
-                    "reason": "active_session_account_not_verified"}
+                    "reason": "session_active_account_missing" if not active_id else "active_session_account_mismatch"}
         return {"active_account_verified": True,
                 "account_currency": "GBP", "account_type": "CFD"}
 
