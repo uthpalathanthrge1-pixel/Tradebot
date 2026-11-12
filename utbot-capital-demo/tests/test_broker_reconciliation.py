@@ -22,9 +22,15 @@ class ReconciliationTests(unittest.TestCase):
         with self.assertRaises(ReconciliationError):
             reconcile_open_confirmation({"dealStatus":"ACCEPTED","dealId":"D1"},[self.position,self.position],"GOLD","BUY","0.01")
     def test_close_confirmed(self):
-        self.assertTrue(reconcile_close_confirmation({"dealStatus":"ACCEPTED"},[],"D1")["closed_confirmed"])
+        self.assertTrue(reconcile_close_confirmation({"dealStatus":"ACCEPTED","dealId":"D1"},[],"D1")["closed_confirmed"])
+    def test_close_wrong_deal_id(self):
+        with self.assertRaisesRegex(ReconciliationError,"close_deal_id_mismatch"):
+            reconcile_close_confirmation({"dealStatus":"ACCEPTED","dealId":"D2"},[],"D1")
+    def test_close_missing_deal_id(self):
+        with self.assertRaisesRegex(ReconciliationError,"close_deal_id_mismatch"):
+            reconcile_close_confirmation({"dealStatus":"ACCEPTED"},[],"D1")
     def test_close_still_open(self):
         with self.assertRaises(ReconciliationError):
-            reconcile_close_confirmation({"dealStatus":"ACCEPTED"},[self.position],"D1")
+            reconcile_close_confirmation({"dealStatus":"ACCEPTED","dealId":"D1"},[self.position],"D1")
 if __name__ == "__main__":
     unittest.main()
