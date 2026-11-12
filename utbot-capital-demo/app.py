@@ -18,6 +18,7 @@ def db():
     conn = sqlite3.connect(DB)
     conn.execute('CREATE TABLE IF NOT EXISTS alerts (symbol TEXT, bar_time INTEGER, direction TEXT, PRIMARY KEY(symbol,bar_time,direction))')
     conn.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
+    conn.execute('CREATE TABLE IF NOT EXISTS execution_events (event_id TEXT PRIMARY KEY, created_utc TEXT NOT NULL, market TEXT NOT NULL, event_type TEXT NOT NULL, deal_id TEXT, status TEXT NOT NULL, details TEXT NOT NULL)')
     conn.commit()
     return conn
 
@@ -143,6 +144,8 @@ def broker_dashboard(request: Request):
                         state['markets'][label] = {'reason': 'Broker market lookup failed'}
         except (CapitalCheckError, ValueError, KeyError, __import__('requests').exceptions.RequestException):
             state['connection'] = 'Broker connection failed'
+    with db() as conn:
+        state['execution_events'] = conn.execute('SELECT created_utc,market,event_type,deal_id,status FROM execution_events ORDER BY created_utc DESC LIMIT 100').fetchall()
     response = dashboard(state)
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Robots-Tag'] = 'noindex'
