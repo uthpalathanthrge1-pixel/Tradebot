@@ -952,3 +952,29 @@ def confirmation_diagnostic(secret: str, deal_reference: str):
     except (CapitalCheckError, requests.exceptions.RequestException):
         return {'ready': False, 'reason': 'broker_confirmation_unavailable',
                 'orders_submitted': False}
+
+@app.post('/operator/one-off-demo-test', include_in_schema=False)
+async def operator_one_off_demo_test(request: Request):
+    """Separate operator token, never accepts a TradingView webhook secret."""
+    import hmac
+    expected=os.getenv('ONE_OFF_OPERATOR_TOKEN','')
+    supplied=request.headers.get('X-One-Off-Operator-Token','')
+    if not expected or not hmac.compare_digest(supplied,expected):
+        raise HTTPException(403,'Forbidden')
+    if request.headers.get('content-type','').split(';')[0].strip().lower()!='application/json':
+        raise HTTPException(415,'JSON required')
+    from one_off_demo_test import run_one_off,OneOffError
+    try:
+        body=await request.json()
+        if not isinstance(body,dict) or body.get('confirm')!='ONE_OFF_GOLD_DEMO_001':
+            raise HTTPException(400,'Explicit test confirmation required')
+        # Stop distance must be operator-verified against live broker rules.
+        return run_one_off(stop_distance=body.get('verified_stop_distance'))
+    except OneOffError as exc:
+        return {'test':'blocked','reason':str(exc),'orders_enabled':False}
+    except HTTPException:
+        raise
+    except Exception:
+        # After an ambiguous broker result, never automatically retry.
+        return {'test':'halted','reason':'broker_result_ambiguous_check_positions_manually',
+                'orders_enabled':False}
