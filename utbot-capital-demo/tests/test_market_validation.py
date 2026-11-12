@@ -72,5 +72,8 @@ class TestBrokerReconciliation(unittest.TestCase):
                           [], deal_id="x")["verified"])
 
 
+from test_webhook_safety import WebhookSafetyTests
+from test_broker_reconciliation import ReconciliationTests
+
 if __name__ == "__main__":
     unittest.main()
