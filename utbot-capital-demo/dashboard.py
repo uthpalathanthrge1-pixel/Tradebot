@@ -40,7 +40,9 @@ def dashboard(state=None):
                      + '<div class="kv"><span>Maximum trade size</span><strong>' + broker_rule(detail.get("max_deal_size")) + '</strong></div>'
                      + '<div class="kv"><span>Size increment</span><strong>' + broker_rule(detail.get("size_increment")) + '</strong></div>'
                      + '<div class="kv"><span>Target margin</span><strong>£1,500</strong></div>'
-                     + '<div class="kv"><span>Estimated GBP margin</span><strong>Not calculated — FX / contract validation pending</strong></div>')
+                     + '<div class="kv"><span>GBP conversion</span><strong>Not verified</strong></div>'
+                     + '<div class="kv"><span>Estimated GBP margin</span><strong>Blocked — missing broker inputs</strong></div>'
+                     + '<div class="kv"><span>Proposed order size</span><strong>Blocked — not safe to calculate</strong></div>')
         else:
             state_text = "EPIC configured · unverified" if configured else "Not configured"
         cards.append(f"""<article class="market"><div class="market-top"><div class="symbol-icon">{icon}</div><span class="pill {tag}">{status}</span></div><h3>{name}</h3><p class="ticker">{label}</p><div class="rule"></div><div class="kv"><span>Broker verification</span><strong>{broker}</strong></div>{extra}<div class="kv"><span>Contract &amp; sizing</span><strong>Pending</strong></div><div class="kv"><span>Order execution</span><strong class="red">Disabled</strong></div><div class="market-foot">{safe(state_text)}</div></article>""")
