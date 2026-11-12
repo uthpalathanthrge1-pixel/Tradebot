@@ -70,6 +70,11 @@ def inspect_market(client, epic):
         "size_increment": rules.get("dealSizeIncrement"),
         "currencies": instrument.get("currencies"),
         "size_preview": None,
+        "sizing_checks": {
+            "contract_units": "verified" if instrument.get("contractSize") is not None else "missing",
+            "size_increment": "verified" if rules.get("dealSizeIncrement") is not None else "missing",
+            "quote_to_gbp_fx": "not_verified",
+        },
         "reason": "contract_units_size_increment_fx_and_margin_require_verification",
         "orders_enabled": False,
     }
