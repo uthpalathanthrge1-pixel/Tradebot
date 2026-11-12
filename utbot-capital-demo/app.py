@@ -104,6 +104,11 @@ def broker_dashboard(request: Request):
                     state['account_count'] = account['gbp_cfd_account_count']
             else:
                 state['connection'] = 'Connected to demo API'
+                try:
+                    prefs = client.preferences()
+                    state['preferences_status'] = 'Available' if isinstance(prefs, dict) else 'Unavailable'
+                except (CapitalCheckError, ValueError, KeyError, __import__('requests').exceptions.RequestException):
+                    state['preferences_status'] = 'Unavailable'
                 for label, definition in MARKETS.items():
                     epic = os.getenv(definition['env'], '').strip()
                     if not epic:
