@@ -40,6 +40,9 @@ def reconcile_close_confirmation(confirmation, positions, deal_id):
     """Require accepted close and absence of that deal in fresh broker positions."""
     if not isinstance(confirmation, dict) or confirmation.get("dealStatus") != "ACCEPTED":
         raise ReconciliationError("close_not_confirmed")
+    confirmed_deal = confirmation.get("dealId")
+    if not isinstance(confirmed_deal, str) or confirmed_deal != deal_id:
+        raise ReconciliationError("close_deal_id_mismatch")
     if not isinstance(positions, list):
         raise ReconciliationError("positions_unavailable")
     if any(isinstance(p, dict) and isinstance(p.get("position"), dict)
