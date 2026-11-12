@@ -72,6 +72,41 @@ class TestBrokerReconciliation(unittest.TestCase):
                           [], deal_id="x")["verified"])
 
 
+class TestReversalPlanning(unittest.TestCase):
+    def test_flat_opens(self):
+        from demo_order_bridge import validate_signal, plan_signal
+        signal=validate_signal({'epic':'GOLD','direction':'BUY','size':'0.01'})
+        self.assertEqual(plan_signal(signal,[])['action'],'OPEN')
+
+    def test_same_direction_holds(self):
+        from demo_order_bridge import validate_signal, plan_signal
+        signal=validate_signal({'epic':'GOLD','direction':'BUY','size':'0.01'})
+        p=[{'position':{'dealId':'d1','direction':'BUY','size':0.01},
+            'market':{'epic':'GOLD'}}]
+        self.assertEqual(plan_signal(signal,p)['action'],'HOLD')
+
+    def test_opposite_requires_close_confirmation(self):
+        from demo_order_bridge import validate_signal, plan_signal
+        signal=validate_signal({'epic':'GOLD','direction':'SELL','size':'0.01'})
+        p=[{'position':{'dealId':'d1','direction':'BUY','size':0.01},
+            'market':{'epic':'GOLD'}}]
+        result=plan_signal(signal,p)
+        self.assertEqual(result['action'],'CLOSE_THEN_OPEN')
+        self.assertTrue(result['requires_confirmed_close'])
+
+    def test_ambiguous_positions_halt(self):
+        from demo_order_bridge import validate_signal, plan_signal
+        signal=validate_signal({'epic':'GOLD','direction':'BUY','size':'0.01'})
+        self.assertEqual(plan_signal(signal,[{},{}])['action'],'HALT')
+
+    def test_missing_stop_metadata_fails_closed(self):
+        from demo_order_bridge import validate_signal, calculate_stop_distance
+        signal=validate_signal({'epic':'GOLD','direction':'BUY','size':'0.01'})
+        with self.assertRaises(ValueError):
+            calculate_stop_distance(signal,verified_gbp_per_point_per_unit=None,
+                                    broker_min_stop_distance='1',
+                                    broker_distance_increment='0.1')
+
 from test_webhook_safety import WebhookSafetyTests
 from test_broker_reconciliation import ReconciliationTests
 
