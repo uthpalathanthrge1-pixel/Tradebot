@@ -1117,15 +1117,31 @@ def one_off_test_click(request:Request):
         rule=rules.get('minNormalStopOrLimitDistance') or rules.get('minStopOrProfitDistance') or {}
         if not isinstance(rule,dict):
             rule={'value':rule,'unit':'UNSPECIFIED'}
-        # Only point-denominated minimum distances are supported.
-        if not isinstance(rule,dict) or str(rule.get('unit','')).upper() not in ('POINTS','POINT'):
-            return {'test':'blocked','reason':'stop_distance_units_unverified','broker_rule':rule,
-                    'available_rule_fields':sorted(str(k) for k in rules.keys()),
-                    'no_order_submitted':True}
-        from decimal import Decimal
-        stop=Decimal(str(rule.get('value')))*Decimal('2')
-        if not stop.is_finite() or stop<=0:
-            return {'test':'blocked','reason':'invalid_broker_stop_distance'}
+        from decimal import Decimal,ROUND_CEILING
+        try:
+            minimum=Decimal(str(rule.get('value')))
+            unit=str(rule.get('unit','')).upper()
+            snapshot=details.get('snapshot') or {}
+            offer=Decimal(str(snapshot.get('offer')))
+            bid=Decimal(str(snapshot.get('bid')))
+            if snapshot.get('marketStatus')!='TRADEABLE' or not (offer>bid>0):
+                return {'test':'blocked','reason':'gold_market_not_tradeable_or_quote_missing','no_order_submitted':True}
+            if unit=='PERCENTAGE':
+                # Capital dealing-rule percentages are percentage points, e.g. 0.001 = 0.001%.
+                stop=offer*minimum/Decimal('100')*Decimal('3')
+            elif unit in ('POINTS','POINT'):
+                stop=minimum*Decimal('3')
+            else:
+                return {'test':'blocked','reason':'stop_distance_units_unverified','broker_rule':rule,'no_order_submitted':True}
+            step_rule=rules.get('minStepDistance') or {}
+            step=Decimal(str(step_rule.get('value'))) if isinstance(step_rule,dict) and step_rule.get('unit')=='POINTS' else Decimal('0.01')
+            if not step.is_finite() or step<=0:
+                raise ValueError('invalid_step')
+            stop=(stop/step).to_integral_value(rounding=ROUND_CEILING)*step
+            if not minimum.is_finite() or minimum<=0 or not stop.is_finite() or stop<=0:
+                raise ValueError('invalid_stop')
+        except (ValueError,TypeError,ArithmeticError):
+            return {'test':'blocked','reason':'invalid_broker_stop_distance','broker_rule':rule,'no_order_submitted':True}
         global _one_off_clicked
         with _one_off_click_lock:
             if _one_off_clicked:
