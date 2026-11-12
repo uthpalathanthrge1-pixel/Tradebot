@@ -9,7 +9,7 @@ from test_execution_coordinator import Broker
 
 class TestGuardedExecution(unittest.TestCase):
     def setUp(self):
-        self.intent=OrderIntent("GOLD","BUY","0.01","2","test-signal")
+        self.intent=OrderIntent("GOLD","SELL","0.01","2","test-signal")
     def test_gate_blocks_without_broker_calls(self):
         broker=Broker()
         with self.assertRaisesRegex(ExecutionHalted,"not_approved"):
