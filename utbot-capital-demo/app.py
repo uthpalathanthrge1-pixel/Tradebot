@@ -1100,8 +1100,10 @@ def one_off_test_click(request:Request):
         raise HTTPException(403,'Forbidden')
     # Same-origin browser request; do not accept cross-site POSTs.
     origin=request.headers.get('origin')
-    if origin and origin.rstrip('/')!=str(request.base_url).rstrip('/'):
+    if not origin or origin.rstrip('/')!=str(request.base_url).rstrip('/':
         raise HTTPException(403,'Origin mismatch')
+    if request.headers.get('content-type','').split(';')[0].strip().lower()!='application/json':
+        raise HTTPException(415,'JSON required')
     global _one_off_clicked
     with _one_off_click_lock:
         if _one_off_clicked:
