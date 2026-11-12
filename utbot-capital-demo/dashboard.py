@@ -9,6 +9,13 @@ def dashboard(state=None):
     def safe(v):
         return html.escape(str(v if v is not None else "Unavailable"))
 
+    def broker_rule(v):
+        if isinstance(v, dict):
+            value = v.get("value")
+            unit = v.get("unit", "")
+            return safe(value) + (" " + safe(unit) if unit else "") if value is not None else "Unavailable"
+        return safe(v)
+
     cards = []
     for label, name, icon in (("GOLD","Gold / XAUUSD","◈"),("OIL","Crude Oil","◉"),("US500","US 500","▥")):
         configured = bool(os.getenv("CAPITAL_" + label + "_EPIC", "").strip())
@@ -27,7 +34,13 @@ def dashboard(state=None):
             extra = ('<div class="kv"><span>Market status</span><strong>' + safe(detail.get("market_status")) + '</strong></div>'
                      + '<div class="kv"><span>Bid / Offer</span><strong>' + safe(detail.get("bid")) + ' / ' + safe(detail.get("offer")) + '</strong></div>'
                      + '<div class="kv"><span>Contract size</span><strong>' + safe(detail.get("contract_size")) + '</strong></div>'
-                     + '<div class="kv"><span>Margin factor</span><strong>' + safe(detail.get("margin_factor")) + '</strong></div>')
+                     + '<div class="kv"><span>Margin factor</span><strong>' + safe(detail.get("margin_factor")) + ' ' + safe(detail.get("margin_factor_unit") or "") + '</strong></div>'
+                     + '<div class="kv"><span>Lot size</span><strong>' + safe(detail.get("lot_size")) + '</strong></div>'
+                     + '<div class="kv"><span>Minimum trade size</span><strong>' + broker_rule(detail.get("min_deal_size")) + '</strong></div>'
+                     + '<div class="kv"><span>Maximum trade size</span><strong>' + broker_rule(detail.get("max_deal_size")) + '</strong></div>'
+                     + '<div class="kv"><span>Size increment</span><strong>' + broker_rule(detail.get("size_increment")) + '</strong></div>'
+                     + '<div class="kv"><span>Target margin</span><strong>£1,500</strong></div>'
+                     + '<div class="kv"><span>Estimated GBP margin</span><strong>Not calculated — FX / contract validation pending</strong></div>')
         else:
             state_text = "EPIC configured · unverified" if configured else "Not configured"
         cards.append(f"""<article class="market"><div class="market-top"><div class="symbol-icon">{icon}</div><span class="pill {tag}">{status}</span></div><h3>{name}</h3><p class="ticker">{label}</p><div class="rule"></div><div class="kv"><span>Broker verification</span><strong>{broker}</strong></div>{extra}<div class="kv"><span>Contract &amp; sizing</span><strong>Pending</strong></div><div class="kv"><span>Order execution</span><strong class="red">Disabled</strong></div><div class="market-foot">{safe(state_text)}</div></article>""")
