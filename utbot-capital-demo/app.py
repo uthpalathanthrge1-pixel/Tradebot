@@ -1015,3 +1015,51 @@ def gold_test_preflight(secret: str):
                 'orders_submitted':False}
     except Exception:
         return {'ready':False,'reason':'broker_preflight_failed','orders_submitted':False}
+
+@app.get('/operator/gold-preflight-report', include_in_schema=False)
+def gold_preflight_report(request: Request):
+    """Browser-readable broker GET report; reuses dashboard Basic authentication."""
+    import base64,hmac
+    from fastapi.responses import JSONResponse
+    expected=os.getenv('DASHBOARD_PASSWORD','')
+    auth=request.headers.get('authorization','')
+    valid=False
+    if expected and auth.startswith('Basic '):
+        try:
+            raw=base64.b64decode(auth[6:],validate=True).decode('utf-8')
+            username,password=raw.split(':',1)
+            valid=hmac.compare_digest(username,'dashboard') and hmac.compare_digest(password,expected)
+        except (ValueError,UnicodeDecodeError):
+            pass
+    if not valid:
+        return JSONResponse({'error':'authentication_required'},status_code=401,
+            headers={'WWW-Authenticate':'Basic realm="UT Bot Demo Dashboard"',
+                     'Cache-Control':'no-store'})
+    from capital import Capital
+    try:
+        broker=Capital()
+        account=broker.active_account_check()
+        if not account.get('active_account_verified'):
+            result={'ready':False,'reason':'demo_account_unverified'}
+        else:
+            epic=os.getenv('CAPITAL_GOLD_EPIC','')
+            if not epic:
+                result={'ready':False,'reason':'gold_epic_missing'}
+            else:
+                details=broker.market_details(epic)
+                instrument=details.get('instrument') or {}
+                rules=details.get('dealingRules') or {}
+                positions=broker.positions()
+                result={'ready':False,'account':'GBP_CFD_DEMO',
+                    'market_status':(details.get('snapshot') or {}).get('marketStatus'),
+                    'min_deal_size':rules.get('minDealSize'),
+                    'min_normal_stop_distance':rules.get('minNormalStopOrLimitDistance'),
+                    'max_stop_distance':rules.get('maxStopOrLimitDistance'),
+                    'stop_rule_units':'as_returned_by_broker',
+                    'margin_factor':instrument.get('marginFactor'),
+                    'open_position_count':len(positions),
+                    'reason':'free_tier_has_no_persistent_ledger_and_stop_risk_unverified'}
+    except Exception:
+        result={'ready':False,'reason':'broker_preflight_failed'}
+    result['orders_submitted']=False
+    return JSONResponse(result,headers={'Cache-Control':'no-store','X-Robots-Tag':'noindex'})
